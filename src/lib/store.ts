@@ -69,6 +69,10 @@ export function exportJson(): void {
 }
 
 export async function importJson(file: File): Promise<void> {
-  merge(JSON.parse(await file.text()));
+  const parsed: unknown = JSON.parse(await file.text());
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('備份檔格式不正確');
+  }
+  merge(parsed as Partial<AppData>);
   save();
 }
