@@ -1,0 +1,18 @@
+{
+  "name": "project-momentum",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --open",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --open",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "sass": "^1.108.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}

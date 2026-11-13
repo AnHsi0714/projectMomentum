@@ -1,0 +1,19 @@
+$types: commute, class, deep, exercise, english, reading, rest, meal, free, prep;
+
+:root {
+  --bg: #f6f6f3; --card: #fff; --ink: #1f2328; --mute: #6b7280; --line: #e5e5e0;
+  --accent: #2f6fed; --now: #fff4d6; --nowline: #e0a800; --ok: #1a8a4a;
+  --commute: #e9e9e4; --class: #dfe7f5; --deep: #d6ecdf; --exercise: #fbe0d6; --english: #e8def7;
+  --reading: #f6ecd2; --rest: #f1f1ee; --meal: #f2e4d8; --free: #f1f1ee; --prep: #e9e9e4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a; --card: #1e2126; --ink: #e6e8eb; --mute: #9aa1ab; --line: #2d3138;
+    --accent: #6b9bff; --now: #3a3318; --nowline: #e0b83a; --ok: #4cc27f;
+    --commute: #2a2d33; --class: #26344d; --deep: #223d2e; --exercise: #4a2e25; --english: #372c4d;
+    --reading: #42391f; --rest: #25282d; --meal: #40332a; --free: #25282d; --prep: #2a2d33;
+  }
+}
+
+@mixin phone { @media (max-width: 720px) { @content; } }
