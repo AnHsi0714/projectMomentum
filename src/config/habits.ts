@@ -2,7 +2,7 @@ import type { Habit } from '../types';
 
 export const HABITS: Habit[] = [
   { id: 'sleep',   name: '固定時間起床與睡覺', target: 7, detail: '' },
-  { id: 'english', name: '英文學習',           target: 5, detail: '' },
+  { id: 'english', name: '英文學習',           target: 5, detail: '每週一個主題：Input、Concept、Output、Review，指令在 NotebookLM' },
   { id: 'reading', name: '閱讀',               target: 4, detail: '' },
   { id: 'workout', name: '正式運動',           target: 3, detail: '' },
   { id: 'project', name: '自主專案',           target: 4, detail: '' },
