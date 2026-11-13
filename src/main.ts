@@ -1,4 +1,5 @@
 import './styles/main.scss';
+import { render as paint, type TemplateResult } from 'lit-html';
 import { DAY_NAMES } from './config/schedule';
 import { initDrag, isDragging } from './drag';
 import { addRow, confirmDraft, isDirty, removeRow, reorderRows, resetRows, setField, startDraft } from './lib/draft';
@@ -6,7 +7,7 @@ import { setRecover } from './lib/schedule';
 import { data, exportJson, importJson, load, save, setStatusListener, type SaveStatus } from './lib/store';
 import { addDays, currentTime, dkey, elapsedMinutes, fmtMD, isDone, isToday, mondayOf, pad, parseKey } from './lib/time';
 import { currentRoute, isRouteHash, state, type ViewId } from './state';
-import { refreshLive, renderToday, updateHabitCounts } from './views/today';
+import { renderToday } from './views/today';
 import { renderReview } from './views/review';
 import { renderTerms } from './views/terms';
 import { renderWeek } from './views/week';
@@ -14,7 +15,7 @@ import { renderWeek } from './views/week';
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 const main = $('#main');
 
-const VIEWS: Record<ViewId, { title: string; render: () => string }> = {
+const VIEWS: Record<ViewId, { title: string; render: () => TemplateResult }> = {
   today: { title: '今天', render: renderToday },
   week: { title: '本週', render: renderWeek },
   review: { title: '回顧', render: renderReview },
@@ -32,22 +33,6 @@ function updateClock(now: Date) {
   $('#clock').textContent = `${fmtMD(now)} 週${DAY_NAMES[now.getDay()]} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
-/** 記下目前焦點所在的元件，重畫後用來找回同一個元件 */
-function focusKey(el: Element | null): string | null {
-  if (!(el instanceof HTMLElement) || el === main || !main.contains(el)) return null;
-  if (el.id) return `#${CSS.escape(el.id)}`;
-  const attrs = Object.entries(el.dataset).map(
-    ([k, v]) => `[data-${k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}="${CSS.escape(v ?? '')}"]`,
-  );
-  return attrs.length ? el.tagName.toLowerCase() + attrs.join('') : null;
-}
-
-/**
- * 重畫目前的畫面。
- * navigated 為 true 表示使用者換了頁：回到頂端並把焦點移到新頁標題。
- * 否則是資料變動造成的重畫：把焦點還給原本的元件，鍵盤操作不會中斷。
- * 調整中的欄位內容都在 state.draft 裡，所以重畫不會丟掉使用者改到一半的東西。
- */
 /**
  * 移動焦點但不捲動畫面。Chrome 對時間欄位會忽略 preventScroll 硬是捲過去，
  * 所以聚焦後再把捲動位置放回原處，拖曳或按鈕操作後畫面才會留在原地。
@@ -59,11 +44,20 @@ function focusStill(el: HTMLElement): void {
   if (window.scrollX !== x || window.scrollY !== y) window.scrollTo(x, y);
 }
 
+/**
+ * 重畫目前的畫面。lit-html 只改動有變化的部分，元件本身留在原處，所以焦點與捲動位置不會跑掉。
+ * navigated 為 true 表示使用者換了頁：回到頂端並把焦點移到新頁標題。
+ * 否則是資料變動造成的重畫：原本有焦點的元件如果因此消失（例如「回到本週」按下後就不見了），
+ * 焦點改放到頁面標題，不會掉到頁面最前面。
+ * 調整中的欄位內容都在 state.draft 裡，所以重畫不會丟掉使用者改到一半的東西。
+ */
 function render(navigated = false) {
   const view = currentRoute();
-  const key = navigated ? null : focusKey(document.activeElement);
+  const hadFocus = main.contains(document.activeElement) && document.activeElement !== main;
 
-  main.innerHTML = VIEWS[view].render();
+  // 訊息區沒有綁定內容，lit-html 不會清它；照原本的習慣，每次重畫先清掉上一次的訊息
+  main.querySelectorAll('.form-msg').forEach(el => (el.textContent = ''));
+  paint(VIEWS[view].render(), main);
 
   document.querySelectorAll<HTMLAnchorElement>('#nav a').forEach(a => {
     if (a.dataset.v === view) a.setAttribute('aria-current', 'page');
@@ -75,8 +69,8 @@ function render(navigated = false) {
   if (navigated) {
     window.scrollTo(0, 0);
     $('#view-title').focus({ preventScroll: true });
-  } else if (key) {
-    focusStill(main.querySelector<HTMLElement>(key) ?? $('#view-title'));
+  } else if (hadFocus && !main.contains(document.activeElement)) {
+    focusStill($('#view-title'));
   }
 }
 
@@ -206,8 +200,8 @@ function tick() {
     render();
     return;
   }
-  // 拖曳到一半不重畫，否則被拖的列會消失；時段的變化下一次 tick 再處理
-  if (currentRoute() === 'today' && isToday(state.selDate) && refreshLive(now) === 'rerender' && !isDragging()) render();
+  // 拖曳到一半不重畫，否則放開時的位置會算錯；下一次 tick 再更新
+  if (currentRoute() === 'today' && isToday(state.selDate) && !isDragging()) render();
 }
 
 main.addEventListener('click', e => {
@@ -253,7 +247,7 @@ main.addEventListener('change', async e => {
     const dk = dkey(state.selDate);
     (data.checks[dk] ??= {})[t.dataset.h] = t.checked;
     save();
-    updateHabitCounts();
+    render();
   } else if (t.id === 'recover') {
     setRecover(dkey(state.selDate), t.checked, currentTime());
     render();

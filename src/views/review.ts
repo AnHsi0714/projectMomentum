@@ -1,21 +1,25 @@
+import { html, type TemplateResult } from 'lit-html';
+import { live } from 'lit-html/directives/live.js';
 import { REVIEW_QUESTIONS } from '../config/habits';
 import { data } from '../lib/store';
-import { dkey, esc, mondayOf } from '../lib/time';
+import { dkey, mondayOf } from '../lib/time';
 import { state } from '../state';
-import { viewHead, weekNav, weekTitle } from './parts';
+import { viewHead } from '../components/view-head';
+import { weekNav, weekTitle } from '../components/week-nav';
 
-export function renderReview(): string {
+export function renderReview(): TemplateResult {
   const key = dkey(mondayOf(state.selDate));
   const answers = data.reviews[key] ?? {};
 
+  // 輸入框的內容用 live() 比對畫面上的實際值，換週時才會換成那一週的答案
   const questions = REVIEW_QUESTIONS.map(
-    (q, i) => `<div class="field">
+    (q, i) => html`<div class="field">
       <label class="q" for="q${i}"><span class="q-num" aria-hidden="true">${i + 1}</span><span>${q}</span></label>
-      <textarea id="q${i}" data-q="${i}" rows="3">${esc(answers[i] ?? '')}</textarea>
+      <textarea id="q${i}" data-q=${i} rows="3" .value=${live(answers[i] ?? '')}></textarea>
     </div>`,
-  ).join('');
+  );
 
-  return `${viewHead('每週回顧', `${weekTitle(state.selDate)}的回顧`)}
+  return html`${viewHead('每週回顧', `${weekTitle(state.selDate)}的回顧`)}
     <div class="stack">
       ${weekNav()}
       <section class="sec">

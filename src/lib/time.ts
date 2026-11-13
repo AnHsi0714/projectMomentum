@@ -87,7 +87,3 @@ export function currentInfo(now: Date, blocks: Block[]): CurrentInfo {
   if (next > 0) return { state: 'gap', idx: next, blocks, m };
   return { state: 'after', blocks, m };
 }
-
-/** 跳脫 HTML，內容與屬性值都能安全使用 */
-export const esc = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
