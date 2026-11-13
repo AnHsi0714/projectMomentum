@@ -370,6 +370,7 @@
 // 底色只是輔助，時段類型一律由文字說明；文字與底色的對比由 check-contrast 把關
 .slot-label,
 .legend .mark,
+.term-name,
 .hero-title {
   text-decoration: underline;
   text-decoration-color: var(--mark, transparent);
@@ -1091,6 +1092,7 @@ select {
   // 螢光筆底線在高對比模式會被改成文字色的粗線，蓋住字，所以整個關掉
   .slot-label,
   .legend .mark,
+  .term-name,
   .hero-title {
     text-decoration: none;
   }
@@ -1134,4 +1136,42 @@ select {
   .check-label input {
     appearance: auto;
   }
+}
+
+// 名詞頁
+
+.rule-list,
+.priority-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-left: 1.5rem;
+}
+
+.term-group {
+  margin-top: 1.5rem;
+
+  > .hint {
+    margin-top: 0.25rem;
+  }
+}
+
+.term-list {
+  margin-top: 0.5rem;
+}
+
+.term {
+  display: grid;
+  gap: 0.25rem;
+  padding-block: 0.75rem;
+  border-top: 1px dotted var(--line-strong);
+
+  dt {
+    font-weight: 700;
+  }
+}
+
+.term-type {
+  color: var(--text-muted);
+  font-size: 0.875rem;
 }

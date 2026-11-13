@@ -1,6 +1,6 @@
 import type { Draft } from './lib/draft';
 
-export type ViewId = 'today' | 'week' | 'review';
+export type ViewId = 'today' | 'week' | 'review' | 'terms';
 
 export const state: {
   /** 目前檢視的日期，三個畫面共用（週導覽以它所在的那一週為準） */
@@ -18,7 +18,7 @@ export const state: {
 let lastRoute: ViewId = 'today';
 
 /** 網址 hash 是否是路由，例如 #/week */
-export const isRouteHash = (hash: string) => /^#\/(today|week|review)$/.test(hash);
+export const isRouteHash = (hash: string) => /^#\/(today|week|review|terms)$/.test(hash);
 
 /**
  * 由網址的 hash 決定畫面。不認識的 hash（例如頁內錨點）不會切換畫面，

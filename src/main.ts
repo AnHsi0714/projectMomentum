@@ -8,6 +8,7 @@ import { addDays, dkey, elapsedMinutes, fmtMD, isDone, isToday, mondayOf, pad, p
 import { currentRoute, isRouteHash, state, type ViewId } from './state';
 import { refreshLive, renderToday, updateHabitCounts } from './views/today';
 import { renderReview } from './views/review';
+import { renderTerms } from './views/terms';
 import { renderWeek } from './views/week';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
@@ -17,6 +18,7 @@ const VIEWS: Record<ViewId, { title: string; render: () => string }> = {
   today: { title: '今天', render: renderToday },
   week: { title: '本週', render: renderWeek },
   review: { title: '回顧', render: renderReview },
+  terms: { title: '名詞', render: renderTerms },
 };
 
 const STATUS_TEXT: Record<SaveStatus, string> = {
