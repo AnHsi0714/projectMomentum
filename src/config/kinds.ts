@@ -24,3 +24,18 @@ export const KINDS: { id: Kind; label: string }[] = [
   { id: 'learn', label: '英文與閱讀' },
   { id: 'life', label: '生活' },
 ];
+
+/** 新增或編輯時段時，類型選單上的名稱。順序就是選單的順序 */
+export const TYPE_LABEL: Record<BlockType, string> = {
+  deep: '深度工作',
+  plan: '規劃與回顧',
+  class: '上課',
+  exercise: '運動',
+  english: '英文',
+  reading: '閱讀',
+  commute: '通勤',
+  prep: '起床、整理、睡前準備',
+  meal: '用餐',
+  rest: '休息',
+  free: '自由時間',
+};

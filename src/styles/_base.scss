@@ -9,6 +9,8 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  // 調整時間表時，確認與取消貼在視窗底部；用鍵盤移動時，被聚焦的欄位不要被它蓋住
+  scroll-padding-bottom: 8rem;
 }
 
 body {
@@ -59,6 +61,7 @@ a {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
   color: inherit;

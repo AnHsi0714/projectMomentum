@@ -1,3 +1,5 @@
+import type { Draft } from './lib/draft';
+
 export type ViewId = 'today' | 'week' | 'review';
 
 export const state: {
@@ -5,9 +7,12 @@ export const state: {
   selDate: Date;
   /** 是否跟著「今天」走，跨過午夜時會自動換日 */
   followToday: boolean;
+  /** 正在調整的那一天的草稿。有草稿就是調整模式，按更新或保存才存檔，不寫進資料檔 */
+  draft: Draft | null;
 } = {
   selDate: new Date(),
   followToday: true,
+  draft: null,
 };
 
 let lastRoute: ViewId = 'today';

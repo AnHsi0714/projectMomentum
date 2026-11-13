@@ -31,6 +31,7 @@ const PAIRS = [
   ['ok', 'surface', TEXT, '達標文字在內容面'],
   ['warn', 'bg', TEXT, '警告文字在頁面底色'],
   ['danger', 'bg', TEXT, '錯誤文字在頁面底色'],
+  ['danger', 'surface', TEXT, '錯誤文字在內容面（編輯任務的表單裡）'],
   ['text', 'mark-focus', TEXT, '螢光筆底色上的字：專注'],
   ['text', 'mark-class', TEXT, '螢光筆底色上的字：上課'],
   ['text', 'mark-move', TEXT, '螢光筆底色上的字：運動'],

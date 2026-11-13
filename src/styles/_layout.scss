@@ -173,6 +173,8 @@
 
 .today-grid {
   display: grid;
+  // 欄寬可縮到比內容小，表單這類有最小寬度的內容才不會把整欄撐出橫向捲軸
+  grid-template-columns: minmax(0, 1fr);
   gap: 2rem;
   margin-top: 2rem;
 

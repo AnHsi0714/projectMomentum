@@ -1,44 +1,50 @@
 import { DAY_NAMES, DAY_THEME } from '../config/schedule';
 import { HABITS } from '../config/habits';
 import { weeklyCount } from '../lib/habits';
-import { blocksOfType, wakeTime } from '../lib/schedule';
+import { blocksFor, blocksOfType, isAdjusted, isCanceled, wakeTime } from '../lib/schedule';
 import { data } from '../lib/store';
-import { dkey, fmtMD, isToday, weekDates } from '../lib/time';
+import { dkey, esc, fmtMD, isToday, weekDates } from '../lib/time';
 import { state } from '../state';
 import type { Block } from '../types';
 import { rangeHtml, viewHead, weekNav, weekTitle } from './parts';
 
-function timesHtml(blocks: Block[], withLabel = false): string {
+/** 一類時段的時間。withLabel 時附上名稱，恢復模式取消的運動會註明 */
+function timesHtml(dk: string, blocks: Block[], withLabel = false): string {
   if (!blocks.length) return '<span class="fact-none">無</span>';
   return blocks
-    .map(
-      b => `<span class="fact-line"><span>${rangeHtml(b[0], b[1])}</span>${withLabel ? `<span class="fact-note">${b[2]}</span>` : ''}</span>`,
-    )
+    .map(b => {
+      const note = `${esc(b[2])}${isCanceled(dk, b) ? '（取消）' : ''}`;
+      return `<span class="fact-line"><span>${rangeHtml(b[0], b[1])}</span>${withLabel ? `<span class="fact-note">${note}</span>` : ''}</span>`;
+    })
     .join('');
 }
 
 function dayCard(d: Date): string {
   const day = d.getDay();
+  const dk = dkey(d);
   const today = isToday(d);
+  const blocks = blocksFor(dk, day);
+  const wake = wakeTime(blocks);
   const facts: [string, string][] = [
-    ['起床', wakeTime(day)],
-    ['上課', timesHtml(blocksOfType(day, 'class'))],
-    ['深度工作', timesHtml(blocksOfType(day, 'deep'), true)],
-    ['運動', timesHtml(blocksOfType(day, 'exercise'), true)],
-    ['英文', timesHtml(blocksOfType(day, 'english'))],
-    ['閱讀', timesHtml(blocksOfType(day, 'reading'))],
+    ['起床', wake ?? '<span class="fact-none">無</span>'],
+    ['上課', timesHtml(dk, blocksOfType(blocks, 'class'))],
+    ['深度工作', timesHtml(dk, blocksOfType(blocks, 'deep'), true)],
+    ['運動', timesHtml(dk, blocksOfType(blocks, 'exercise'), true)],
+    ['英文', timesHtml(dk, blocksOfType(blocks, 'english'))],
+    ['閱讀', timesHtml(dk, blocksOfType(blocks, 'reading'))],
   ];
   return `<article class="daycard${today ? ' is-today' : ''}">
     <header class="daycard-head">
       <h3>週${DAY_NAMES[day]}</h3>
       <span class="daycard-date">${fmtMD(d)}</span>
       ${today ? '<span class="badge badge-today">今天</span>' : ''}
+      ${isAdjusted(dk) ? '<span class="badge">已調整</span>' : ''}
       <p class="daycard-theme">${DAY_THEME[day]}</p>
     </header>
     <dl class="facts">
       ${facts.map(([k, v]) => `<div class="fact"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}
     </dl>
-    <button type="button" class="btn" data-open-day="${dkey(d)}">查看完整時間表<span class="sr-only">（週${DAY_NAMES[day]}）</span></button>
+    <button type="button" class="btn" data-open-day="${dk}">查看完整時間表<span class="sr-only">（週${DAY_NAMES[day]}）</span></button>
   </article>`;
 }
 
