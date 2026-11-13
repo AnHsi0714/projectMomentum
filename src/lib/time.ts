@@ -15,6 +15,19 @@ export const parseKey = (k: string) => {
   return new Date(y, m - 1, d);
 };
 
+/**
+ * 現在時間。開發時可以用網址 ?now=21:15 指定時分，日期仍是今天，時間會停在那一刻，
+ * 方便在任何時候檢查「現在」區塊與進度尺。正式建置不理會這個參數。
+ */
+export function currentTime(): Date {
+  const d = new Date();
+  if (import.meta.env.DEV) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(new URLSearchParams(location.search).get('now') ?? '');
+    if (m) d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  }
+  return d;
+}
+
 export const isToday = (d: Date) => dkey(d) === dkey(new Date());
 
 /** 11月13日 */

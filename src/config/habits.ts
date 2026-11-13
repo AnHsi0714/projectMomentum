@@ -14,7 +14,7 @@ export const HABITS: Habit[] = [
     target: 4,
     detail: "每週共 2 小時，書名、章節與想法記在每週回顧",
   },
-  { id: "workout", name: "正式訓練", target: 3, detail: "" },
+  { id: "workout", name: "運動", target: 3, detail: "" },
   { id: "project", name: "自主專案", target: 4, detail: "" },
   { id: "school", name: "課業整理", target: 2, detail: "" },
   { id: "review", name: "每週回顧（週日）", target: 1, detail: "" },

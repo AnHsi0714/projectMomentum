@@ -296,22 +296,36 @@
   font-variant-numeric: tabular-nums;
 }
 
-// 進度尺：墨色填滿，每 10% 一格刻度，前端一根青色指針
+// 進度尺：墨色填滿，前端一根青色指針。刻度對齊時鐘，上下左右都以時間點為中心穿過尺，
+// 間隔依時段長度（today.ts 的 tickStep）；整點最長最粗、半點次之、其餘最短
 .hero-meter {
   position: relative;
   height: 0.5rem;
-  margin-block: 0.875rem 0.5rem;
+  margin-block: 1rem;
   background-color: var(--surface-2);
-  background-image: repeating-linear-gradient(
-    90deg,
-    transparent 0,
-    transparent calc(10% - 1px),
-    var(--line-strong) calc(10% - 1px),
-    var(--line-strong) 10%
-  );
 
+  // 用左邊框畫刻度，高對比模式下會換成系統的文字色，不會消失
+  .tick {
+    position: absolute;
+    top: 50%;
+    height: 0.875rem;
+    border-left: 1px solid var(--line-strong);
+    transform: translate(-50%, -50%);
+  }
+
+  .tick-half {
+    height: 1.125rem;
+  }
+
+  .tick-hour {
+    height: 1.5rem;
+    border-left: 2px solid var(--text);
+  }
+
+  // 填滿與指針疊在刻度上面：已經過的部分只露出刻度的上下兩端
   i {
     position: relative;
+    z-index: 1;
     display: block;
     height: 100%;
     background: var(--ink);

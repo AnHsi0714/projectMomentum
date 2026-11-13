@@ -4,7 +4,7 @@ import { initDrag, isDragging } from './drag';
 import { addRow, confirmDraft, isDirty, removeRow, reorderRows, resetRows, setField, startDraft } from './lib/draft';
 import { setRecover } from './lib/schedule';
 import { data, exportJson, importJson, load, save, setStatusListener, type SaveStatus } from './lib/store';
-import { addDays, dkey, elapsedMinutes, fmtMD, isDone, isToday, mondayOf, pad, parseKey } from './lib/time';
+import { addDays, currentTime, dkey, elapsedMinutes, fmtMD, isDone, isToday, mondayOf, pad, parseKey } from './lib/time';
 import { currentRoute, isRouteHash, state, type ViewId } from './state';
 import { refreshLive, renderToday, updateHabitCounts } from './views/today';
 import { renderReview } from './views/review';
@@ -70,7 +70,7 @@ function render(navigated = false) {
     else a.removeAttribute('aria-current');
   });
   document.title = `${VIEWS[view].title}｜Momentum 週間自律`;
-  updateClock(new Date());
+  updateClock(currentTime());
 
   if (navigated) {
     window.scrollTo(0, 0);
@@ -140,7 +140,7 @@ function reorder(from: number, to: number, byKey = false) {
 /** 調整時間表上的各種按鈕。所有動作都只改草稿，按更新或保存才存檔 */
 function handleAction(act: string, index?: number) {
   const sel = state.selDate;
-  const now = new Date();
+  const now = currentTime();
   const d = state.draft;
   if (!d) return;
 
@@ -198,7 +198,7 @@ function handleAction(act: string, index?: number) {
 
 /** 定時與回到分頁時呼叫：更新時鐘、跨日換日、就地更新「現在」 */
 function tick() {
-  const now = new Date();
+  const now = currentTime();
   updateClock(now);
   if (state.followToday && dkey(state.selDate) !== dkey(now)) {
     state.selDate = now;
@@ -222,10 +222,10 @@ main.addEventListener('click', e => {
     if (goToDate(date, isToday(date))) render();
   } else if (weekBtn) {
     const delta = Number(weekBtn.dataset.week);
-    const ok = delta === 0 ? goToDate(new Date(), true) : goToDate(addDays(state.selDate, delta * 7), false);
+    const ok = delta === 0 ? goToDate(currentTime(), true) : goToDate(addDays(state.selDate, delta * 7), false);
     if (ok) render();
   } else if (t.closest('[data-today]')) {
-    if (goToDate(new Date(), true)) render();
+    if (goToDate(currentTime(), true)) render();
   } else if (openDay) {
     const date = parseKey(openDay.dataset.openDay!);
     if (goToDate(date, isToday(date))) location.hash = '#/today';
@@ -235,7 +235,7 @@ main.addEventListener('click', e => {
     render();
     // 焦點放在現在或接下來那個任務的名稱。不放時間欄位，那裡第一格是「上午／下午」，不是要改的地方。
     // 整天都過了就放第一個任務；這一天沒有任務就放在新增鈕
-    const elapsed = elapsedMinutes(d.date, new Date());
+    const elapsed = elapsedMinutes(d.date, currentTime());
     const next = d.blocks.findIndex(b => !isDone(b, elapsed));
     focusField(Math.max(next, 0), 'label') || focusButton('add');
   } else if (action) {
@@ -255,7 +255,7 @@ main.addEventListener('change', async e => {
     save();
     updateHabitCounts();
   } else if (t.id === 'recover') {
-    setRecover(dkey(state.selDate), t.checked, new Date());
+    setRecover(dkey(state.selDate), t.checked, currentTime());
     render();
   } else if (t.id === 'file-import' && t.files?.[0]) {
     if (!confirm('匯入會覆蓋目前所有紀錄，確定要繼續嗎？')) {

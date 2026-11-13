@@ -78,7 +78,7 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
     title: "運動",
     items: [
       {
-        term: "正式訓練",
+        term: "運動",
         meaning: "週四到週六的居家訓練，每週 3 次。",
         type: "exercise",
       },
@@ -153,7 +153,7 @@ export const PRIORITY: { name: string; note: string }[] = [
   { name: "吃飯與洗澡", note: "可以挪時間，不取消。" },
   { name: "當天最重要的一項任務", note: "通常是深度工作，週日是每週回顧。" },
   {
-    name: "英文、正式訓練、閱讀、課業整理",
+    name: "英文、運動、閱讀、課業整理",
     note: "其餘的習慣，縮短比取消好。",
   },
   { name: "輕量任務", note: "可以延到別天。" },

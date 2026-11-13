@@ -6,7 +6,7 @@ import { weeklyCount } from '../lib/habits';
 import { blocksFor, isCanceled, isConfirmed, isRecovering } from '../lib/schedule';
 import { data } from '../lib/store';
 import {
-  currentInfo, dkey, elapsedMinutes, esc, fmtDur, fmtMD, isDone, isToday, toMin, weekDates, type CurrentInfo,
+  currentInfo, currentTime, dkey, elapsedMinutes, esc, fmtDur, fmtMD, isDone, isToday, toMin, weekDates, type CurrentInfo,
 } from '../lib/time';
 import { state } from '../state';
 import type { Block, BlockType } from '../types';
@@ -19,6 +19,23 @@ const signature = (info: CurrentInfo) =>
   info.state === 'in' || info.state === 'gap' ? `${info.state}:${info.idx}` : info.state;
 const progress = (m: number, s: number, e: number) => Math.round(((m - s) / (e - s)) * 100);
 const elapsedText = (m: number, s: number) => `已進行 ${fmtDur(m - s)}`;
+
+/** 刻度間隔（分鐘）：1 小時內每 5 分，2 小時內每 10 分，4 小時內每 30 分，更長每 1 小時 */
+const tickStep = (len: number) => (len <= 60 ? 5 : len <= 120 ? 10 : len <= 240 ? 30 : 60);
+
+/**
+ * 進度尺的刻度，對齊時鐘上的整點，不是從時段開始算。
+ * 整點最長最粗，半點次之，其餘最短。頭尾剛好落在刻度上時也畫，看得出這段從幾點到幾點。
+ */
+function ticksHtml(s: number, e: number): string {
+  const step = tickStep(e - s);
+  const out: string[] = [];
+  for (let t = Math.ceil(s / step) * step; t <= e; t += step) {
+    const level = t % 60 === 0 ? ' tick-hour' : t % 30 === 0 ? ' tick-half' : '';
+    out.push(`<span class="tick${level}" style="left:${(((t - s) / (e - s)) * 100).toFixed(2)}%"></span>`);
+  }
+  return out.join('');
+}
 
 /** 主視覺的內容：現在是哪個時段、還剩多久、接著是什麼 */
 export function heroHtml(now: Date, dk: string, blocks: Block[]): string {
@@ -34,9 +51,9 @@ export function heroHtml(now: Date, dk: string, blocks: Block[]): string {
       <h2 class="hero-title kind-${KIND_OF[cur[3]]}${canceled ? ' is-canceled' : ''}">${esc(cur[2])}</h2>
       <p class="hero-time">${rangeHtml(cur[0], cur[1])}</p>
       <p class="hero-count"><span class="hero-count-label">還剩</span> <span class="hero-count-value">${fmtDur(e - info.m)}</span></p>
-      <div class="hero-meter" aria-hidden="true"><i style="width:${progress(info.m, s, e)}%"></i></div>
+      <div class="hero-meter" aria-hidden="true"><i style="width:${progress(info.m, s, e)}%"></i>${ticksHtml(s, e)}</div>
       <div class="hero-foot">
-        <p class="hero-meta">${elapsedText(info.m, s)}</p>
+        <p class="hero-meta"><span class="hero-elapsed">${elapsedText(info.m, s)}</span><span aria-hidden="true">・每格 ${fmtDur(tickStep(e - s))}</span></p>
         <p class="hero-next">${nxt ? `接著 <b>${nxt[0]}</b> ${esc(nxt[2])}` : '接著 <b>23:00</b> 就寢'}</p>
       </div>`;
   }
@@ -208,7 +225,7 @@ export function refreshLive(now: Date): 'rerender' | undefined {
     const s = toMin(cur[0]);
     const e = toMin(cur[1]);
     const bar = card.querySelector<HTMLElement>('.hero-meter i');
-    const meta = card.querySelector('.hero-meta');
+    const meta = card.querySelector('.hero-elapsed');
     const left = card.querySelector('.hero-count-value');
     if (bar) bar.style.width = `${progress(info.m, s, e)}%`;
     if (meta) meta.textContent = elapsedText(info.m, s);
@@ -217,7 +234,7 @@ export function refreshLive(now: Date): 'rerender' | undefined {
 }
 
 export function renderToday(): string {
-  const now = new Date();
+  const now = currentTime();
   const sel = state.selDate;
   const dk = dkey(sel);
   const day = sel.getDay();
