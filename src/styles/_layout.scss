@@ -1,0 +1,208 @@
+@use 'mixins' as *;
+
+.wrap {
+  max-width: 72rem;
+  margin-inline: auto;
+  padding: 0 1rem 3rem;
+
+  @include from($bp-sm) {
+    padding-inline: 2rem;
+  }
+}
+
+// 報頭：頂端一條粗墨線，像報紙的版頭
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  padding-block: 0.875rem 0.75rem;
+  border-top: 0.25rem solid var(--text);
+}
+
+.brand {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+// 青色方印，裝飾用，不進閱讀器
+.brand-seal {
+  display: grid;
+  flex: none;
+  place-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+
+.brand-sub {
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  letter-spacing: 0.12em;
+}
+
+.site-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1.25rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+// 儲存狀態：小方塊只是裝飾，狀態一律有文字
+.status {
+  display: inline-flex;
+  align-items: center;
+  // 狀態文字含不能斷行的檔名，放大文字時要允許在任意處換行，否則會撐出橫向捲軸
+  overflow-wrap: anywhere;
+  gap: 0.5rem;
+
+  span {
+    min-width: 0;
+  }
+
+  &::before {
+    content: '';
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    background: currentcolor;
+  }
+
+  &[data-state='file'] {
+    color: var(--ok);
+  }
+
+  &[data-state='local'] {
+    color: var(--warn);
+    font-weight: 700;
+  }
+
+  &[data-state='error'] {
+    color: var(--danger);
+    font-weight: 700;
+  }
+}
+
+// 導覽：像書籤的分頁，底下一條墨線，目前頁用粗線加深色字，不靠顏色
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+  margin-bottom: 1.75rem;
+  border-bottom: 1px solid var(--text);
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding-inline: 0.75rem;
+    margin-bottom: -1px;
+    border-bottom: 4px solid transparent;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-decoration: none;
+
+    &:hover {
+      color: var(--text);
+      border-bottom-color: var(--line-strong);
+    }
+
+    &[aria-current='page'] {
+      color: var(--text);
+      border-bottom-color: var(--text);
+    }
+  }
+}
+
+// 高對比模式會把透明邊框也上色，導覽列的底線要明確指定：目前頁用高亮色，其餘用畫布色。
+// 標籤不再往下壓住導覽列的細線，細線才會從頭連到尾
+@media (forced-colors: active) {
+  .site-nav a {
+    margin-bottom: 0;
+    border-bottom-color: Canvas;
+
+    &[aria-current='page'] {
+      border-bottom-color: Highlight;
+    }
+  }
+}
+
+.view-head {
+  margin-bottom: 1.25rem;
+
+  h1 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.875rem;
+  }
+}
+
+.view-sub {
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+}
+
+.stack {
+  display: grid;
+  // 欄寬可縮到比內容小，過長的內容才不會把整頁撐出橫向捲軸
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 1.25rem;
+}
+
+.today-grid {
+  display: grid;
+  gap: 2rem;
+  margin-top: 2rem;
+
+  @include from($bp-md) {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 2.5rem;
+    align-items: start;
+  }
+}
+
+.site-footer {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-strong);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+
+  ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  // 分隔點只是裝飾；支援的瀏覽器用空的替代文字，閱讀器就不會唸出來
+  li + li::before {
+    content: '・';
+    content: '・' / '';
+    margin-inline: 0.5rem;
+  }
+}

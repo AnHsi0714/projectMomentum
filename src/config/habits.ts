@@ -10,10 +10,10 @@ export const HABITS: Habit[] = [
   { id: 'review',  name: '每週回顧（週日）',   target: 1, detail: '' },
 ];
 
-export const MODES: Record<ModeId, { name: string; note: string }> = {
-  normal:  { name: '正常模式', note: '照原定時間表執行。' },
-  adjust:  { name: '調整模式', note: '保留今天最重要的一項任務，其餘縮短、交換順序或取消。不延後睡眠來補進度。' },
-  recover: { name: '恢復模式', note: '優先處理身體狀況，取消運動及非急迫任務。恢復後直接接回正常時間表。' },
+export const MODES: Record<ModeId, { name: string; short: string; note: string }> = {
+  normal:  { name: '正常模式', short: '正常', note: '照原定時間表執行。' },
+  adjust:  { name: '調整模式', short: '調整', note: '保留今天最重要的一項任務，其餘縮短、交換順序或取消。不延後睡眠來補進度。' },
+  recover: { name: '恢復模式', short: '恢復', note: '優先處理身體狀況，取消運動及非急迫任務。恢復後直接接回正常時間表。' },
 };
 
 export const REVIEW_QUESTIONS = [

@@ -1,19 +1,91 @@
-$types: commute, class, deep, exercise, english, reading, rest, meal, free, prep;
+// 設計 token：顏色以 CSS 變數輸出，淺色為預設，深色跟隨系統設定。
+// 配色走「清醒專注」：白色的底（深色模式是深灰色）、藍黑色的墨，整頁只有一個亮青色，
+// 專門用來標示「現在」與「今天」，其餘狀態靠墨色的深淺與形狀區分。
+// 唯一的暖色是螢光筆的黃，所以「專注」類的時段在畫面上最先被看到。
+// 所有配對須通過 npm run check:contrast（WCAG 2.2 AA）。
+// 色票命名：
+//   bg、surface、surface-2    頁面底色、內容面（現在的時段、輸入欄位、主視覺）、較深的底色（已過的時段）。
+//                             淺色模式的內容面與底色同為白色，靠邊框區分；深色模式的內容面比底色略亮
+//   line、line-strong          裝飾分隔線、表單元件邊框（後者須達 3:1）
+//   text、text-muted           內文、次要文字（皆須達 4.5:1）
+//   ink、on-ink                選中與完成的實心狀態：墨色底配淺色字
+//   accent 系列                亮青色，只用在「現在」「今天」與連結
+//   focus                      鍵盤焦點框
+//   ok、warn、danger           達標、僅存在瀏覽器、儲存失敗
+//   mark-*                     時段類型的螢光筆底色，只當輔助，意義另有文字說明
+
+$light: (
+  'bg': #ffffff,
+  'surface': #ffffff,
+  'surface-2': #eaeef2,
+  'line': #d5dce2,
+  'line-strong': #5b6f7e,
+  'text': #0c1a24,
+  'text-muted': #41566a,
+  'ink': #0c1a24,
+  'on-ink': #ffffff,
+  'accent': #00778a,
+  'accent-hover': #005a69,
+  'on-accent': #ffffff,
+  'focus': #0c1a24,
+  'ok': #16703f,
+  'warn': #80500a,
+  'danger': #b3261e,
+  'mark-focus': #f6df72,
+  'mark-class': #a9c4de,
+  'mark-move': #f5b8a2,
+  'mark-learn': #b4e0c6,
+);
+
+$dark: (
+  'bg': #1e2023,
+  'surface': #25282c,
+  'surface-2': #2e3237,
+  'line': #3d4248,
+  'line-strong': #8b949c,
+  'text': #eceff1,
+  'text-muted': #adb5bc,
+  'ink': #eceff1,
+  'on-ink': #1e2023,
+  'accent': #4fd0e8,
+  'accent-hover': #8be4f4,
+  'on-accent': #04202a,
+  'focus': #eceff1,
+  'ok': #6fd8a0,
+  'warn': #f0b95e,
+  'danger': #ff8f85,
+  'mark-focus': #6b5c14,
+  'mark-class': #2f4b66,
+  'mark-move': #7f402d,
+  'mark-learn': #2f5f4a,
+);
+
+@mixin emit($map) {
+  @each $name, $value in $map {
+    --#{$name}: #{$value};
+  }
+}
 
 :root {
-  --bg: #f6f6f3; --card: #fff; --ink: #1f2328; --mute: #6b7280; --line: #e5e5e0;
-  --accent: #2f6fed; --now: #fff4d6; --nowline: #e0a800; --ok: #1a8a4a;
-  --commute: #e9e9e4; --class: #dfe7f5; --deep: #d6ecdf; --exercise: #fbe0d6; --english: #e8def7;
-  --reading: #f6ecd2; --rest: #f1f1ee; --meal: #f2e4d8; --free: #f1f1ee; --prep: #e9e9e4;
+  color-scheme: light dark;
+  @include emit($light);
+
+  // 內文用無襯線；標題、日期與大字用襯線，像印刷品。找不到字型時退回系統預設
+  --font-body: 'Noto Sans TC', 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', system-ui, -apple-system,
+    'Segoe UI', sans-serif;
+  --font-display: 'Noto Serif TC', 'Source Han Serif TC', 'Songti TC', 'PMingLiU', 'MingLiU', Georgia, serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #15171a; --card: #1e2126; --ink: #e6e8eb; --mute: #9aa1ab; --line: #2d3138;
-    --accent: #6b9bff; --now: #3a3318; --nowline: #e0b83a; --ok: #4cc27f;
-    --commute: #2a2d33; --class: #26344d; --deep: #223d2e; --exercise: #4a2e25; --english: #372c4d;
-    --reading: #42391f; --rest: #25282d; --meal: #40332a; --free: #25282d; --prep: #2a2d33;
+    @include emit($dark);
   }
 }
 
-@mixin phone { @media (max-width: 720px) { @content; } }
+// 使用者要求較高對比時，弱化裝飾色、加強文字與分隔線
+@media (prefers-contrast: more) {
+  :root {
+    --line: var(--line-strong);
+    --text-muted: var(--text);
+  }
+}

@@ -1,0 +1,11 @@
+// 斷點以 rem 計，會隨使用者的字級設定一起縮放，放大文字時版面也跟著重排。
+$bp-xs: 22.5rem;
+$bp-sm: 40rem;
+$bp-md: 56rem;
+$bp-lg: 64rem;
+
+@mixin from($bp) {
+  @media (min-width: $bp) {
+    @content;
+  }
+}

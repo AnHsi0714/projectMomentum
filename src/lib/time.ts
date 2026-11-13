@@ -18,19 +18,22 @@ export const parseKey = (k: string) => {
 
 export const isToday = (d: Date) => dkey(d) === dkey(new Date());
 
+/** 11月13日 */
+export const fmtMD = (d: Date) => `${d.getMonth() + 1}月${d.getDate()}日`;
+
+export const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+
 export function mondayOf(d: Date): Date {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
   return x;
 }
 
+export const isSameWeek = (a: Date, b: Date) => dkey(mondayOf(a)) === dkey(mondayOf(b));
+
 export function weekDates(d: Date): Date[] {
   const m = mondayOf(d);
-  return Array.from({ length: 7 }, (_, i) => {
-    const x = new Date(m);
-    x.setDate(m.getDate() + i);
-    return x;
-  });
+  return Array.from({ length: 7 }, (_, i) => addDays(m, i));
 }
 
 export function fmtDur(min: number): string {

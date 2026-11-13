@@ -1,0 +1,135 @@
+@use 'mixins' as *;
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  // 以 rem 為單位，使用者調整瀏覽器字級時會跟著縮放
+  font: 1rem/1.7 var(--font-body);
+  overflow-wrap: break-word;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+dl,
+dd {
+  margin: 0;
+}
+
+h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 1.35rem + 1.4vw, 2.5rem);
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+
+h2 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+h3 {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+a {
+  color: var(--accent);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+// 選取文字時用螢光筆的黃色，跟時間表的標記同一套語言
+::selection {
+  background: var(--mark-focus);
+  color: var(--text);
+}
+
+// 鍵盤焦點：全站統一的粗外框，墨色對紙色的對比遠高於 3:1，留出間隙讓實心按鈕上也看得到
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+// 只供程式用的焦點目標（跳過連結、換頁後的標題），不在 Tab 順序內
+main:focus {
+  outline: none;
+}
+
+// 只給螢幕閱讀器的文字
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  inset-inline-start: 1rem;
+  top: -5rem;
+  z-index: 10;
+  padding: 0.75rem 1rem;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 700;
+
+  &:focus {
+    top: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+// Windows 高對比模式：背景色會被系統覆寫，改靠邊框與系統色表達狀態
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}

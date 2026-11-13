@@ -1,5 +1,5 @@
 export type BlockType =
-  | 'commute' | 'class' | 'deep' | 'exercise' | 'english'
+  | 'commute' | 'class' | 'deep' | 'plan' | 'exercise' | 'english'
   | 'reading' | 'rest' | 'meal' | 'free' | 'prep';
 
 /** [開始, 結束, 內容, 類型]，時間格式 HH:MM */
