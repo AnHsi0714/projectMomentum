@@ -69,7 +69,7 @@ function render(navigated = false) {
     if (a.dataset.v === view) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
-  document.title = `${VIEWS[view].title}｜Momentum 週間自律`;
+  document.title = `${VIEWS[view].title}｜Momentum 律動計畫`;
   updateClock(currentTime());
 
   if (navigated) {

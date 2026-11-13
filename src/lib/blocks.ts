@@ -1,11 +1,12 @@
 import { TYPE_LABEL } from '../config/kinds';
+import { SLEEP_TIME } from '../config/schedule';
 import type { Block, BlockType } from '../types';
 import { fmtTime, toMin } from './time';
 
 // 這個檔案只放時段的純運算（驗證、排序、重排），不碰儲存，方便單獨測試。
 
-/** 每天 23:00 就寢，任何任務都不能排到這之後 */
-export const SLEEP_MIN = 23 * 60;
+/** 就寢時間的分鐘數，任何任務都不能排到這之後；時間本身在 config/schedule.ts 的 SLEEP_TIME */
+export const SLEEP_MIN = toMin(SLEEP_TIME);
 
 export const isBlockType = (v: unknown): v is BlockType => typeof v === 'string' && Object.hasOwn(TYPE_LABEL, v);
 
@@ -41,7 +42,7 @@ export interface Problem {
 }
 
 /**
- * 時間表是連續的：每個任務結束在下一個任務開始的時候，最後一個結束在 23:00 就寢。
+ * 時間表是連續的：每個任務結束在下一個任務開始的時候，最後一個結束在就寢時間。
  * 所以只需要開始時間，結束時間由這裡依表上的順序算出來，直接改傳進來的陣列。
  * 下一列還沒填開始時間時，這一列的結束先留空。
  */
@@ -54,7 +55,7 @@ export function chainEnds(blocks: Block[]): Block[] {
 }
 
 /**
- * 按下確認前的檢查：每列要有名稱與開始時間，開始要早於 23:00，也不能和別列同時開始。
+ * 按下確認前的檢查：每列要有名稱與開始時間，開始要早於就寢時間，也不能和別列同時開始。
  * 開始時間的先後不用照表上的順序，確認時會自動依開始時間排好，所以不算問題。
  */
 export function dayProblems(blocks: Block[]): Problem[] {
@@ -63,7 +64,7 @@ export function dayProblems(blocks: Block[]): Problem[] {
     if (!b[2].trim()) out.push({ index: i, field: 'label', message: '請輸入任務名稱。' });
     if (!isTime(b[0])) return void out.push({ index: i, field: 'start', message: '請填入開始時間。' });
     if (toMin(b[0]) >= SLEEP_MIN) {
-      return void out.push({ index: i, field: 'start', message: '開始時間要早於 23:00，不延後睡眠來補進度。' });
+      return void out.push({ index: i, field: 'start', message: `開始時間要早於 ${SLEEP_TIME}，不延後睡眠來補進度。` });
     }
     const same = blocks.find((o, j) => j < i && o[0] === b[0]);
     if (same) out.push({ index: i, field: 'start', message: `和「${same[2] || '未命名的任務'}」的開始時間相同。` });

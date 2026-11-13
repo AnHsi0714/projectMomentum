@@ -1,4 +1,4 @@
-import { DAY_NAMES, DAY_THEME } from '../config/schedule';
+import { DAY_NAMES, DAY_THEME, SLEEP_TIME } from '../config/schedule';
 import { ADJUST_NOTE, HABITS, RECOVER_NOTE } from '../config/habits';
 import { KIND_OF, KINDS, TYPE_LABEL } from '../config/kinds';
 import type { Draft } from '../lib/draft';
@@ -54,7 +54,7 @@ export function heroHtml(now: Date, dk: string, blocks: Block[]): string {
       <div class="hero-meter" aria-hidden="true"><i style="width:${progress(info.m, s, e)}%"></i>${ticksHtml(s, e)}</div>
       <div class="hero-foot">
         <p class="hero-meta"><span class="hero-elapsed">${elapsedText(info.m, s)}</span><span aria-hidden="true">・每格 ${fmtDur(tickStep(e - s))}</span></p>
-        <p class="hero-next">${nxt ? `接著 <b>${nxt[0]}</b> ${esc(nxt[2])}` : '接著 <b>23:00</b> 就寢'}</p>
+        <p class="hero-next">${nxt ? `接著 <b>${nxt[0]}</b> ${esc(nxt[2])}` : `接著 <b>${SLEEP_TIME}</b> 就寢`}</p>
       </div>`;
   }
   if (info.state === 'before' || info.state === 'gap') {
@@ -69,7 +69,7 @@ export function heroHtml(now: Date, dk: string, blocks: Block[]): string {
       <div class="hero-foot"><p class="hero-next">不延後睡眠來補進度。</p></div>`;
   }
   return `<p class="hero-eyebrow">今日時程已結束</p>
-    <h2 class="hero-title">${info.m < 23 * 60 ? '準備睡覺' : '該就寢了'}</h2>
+    <h2 class="hero-title">${info.m < toMin(SLEEP_TIME) ? '準備睡覺' : '該就寢了'}</h2>
     <div class="hero-foot"><p class="hero-next">不延後睡眠來補進度。</p></div>`;
 }
 
@@ -151,7 +151,7 @@ function adjustEntryHtml(lockedNote: string | null): string {
 
 /** 調整中，時間表上方的操作說明 */
 function adjustHintHtml(): string {
-  return `<p class="hint" id="move-note">每列左邊的時間是<strong>開始時間</strong>，結束時間不用填：每個任務會延續到下一個任務開始，最後一個到 23:00 就寢。新增的任務也只要填開始時間，會自動插進那個時間，前一個任務就在那時結束。按住左邊的上下箭頭拖曳可以調整先後，用鍵盤時把焦點移到箭頭上按上下鍵。儲存時會依開始時間自動排好。按「更新時間表」儲存後還能再調整，連已經結束的任務都能改；按「保存當天時間表」會儲存並<strong>定稿，這一天之後不能再調整</strong>。</p>
+  return `<p class="hint" id="move-note">每列左邊的時間是<strong>開始時間</strong>，結束時間不用填：每個任務會延續到下一個任務開始，最後一個到 ${SLEEP_TIME} 就寢。新增的任務也只要填開始時間，會自動插進那個時間，前一個任務就在那時結束。按住左邊的上下箭頭拖曳可以調整先後，用鍵盤時把焦點移到箭頭上按上下鍵。儲存時會依開始時間自動排好。按「更新時間表」儲存後還能再調整，連已經結束的任務都能改；按「保存當天時間表」會儲存並<strong>定稿，這一天之後不能再調整</strong>。</p>
     <p class="form-msg" id="adjust-msg" role="status"></p>`;
 }
 

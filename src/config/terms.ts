@@ -1,3 +1,4 @@
+import { SLEEP_TIME } from "./schedule";
 import type { BlockType } from "../types";
 
 // 「名詞」頁的內容。時段名稱以這裡為準，新增或改名時段時先看有沒有現成的名詞。
@@ -8,6 +9,7 @@ export const NAMING_RULES = [
   "「、」表示都要做，例如「洗澡、整理」。",
   "「A、B」照順序做，先做 A 再做 B。",
   "「A或B」優先選 A，A 做不了或不需要時才改做 B。",
+  "冒號後面是這段要做的事，例如「深度工作：課業或專案」。",
 ];
 
 export type Term = {
@@ -22,14 +24,9 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
     title: "專注",
     items: [
       {
-        term: "自主專案深度工作",
+        term: "深度工作",
         meaning:
-          "做自主專案，最多兩個同時進行，一個時段只做其中一個。60 到 90 分鐘，開始前先確認要產出什麼。課業做不完時可以改做課業。",
-        type: "deep",
-      },
-      {
-        term: "課業深度工作",
-        meaning: "需要專心的課業，例如作業、報告、考試準備。",
+          "60 到 90 分鐘，一次只做一件事。名稱冒號後面寫這段做什麼：專案（自主專案）、課業、文獻（閱讀文獻）或 HCI（學習 HCI 知識），排前面的優先。開始前決定要產出什麼，記在每日筆記。課業做不完時優先課業；自主專案最多兩個同時進行。",
         type: "deep",
       },
       {
@@ -128,7 +125,7 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
       { term: "洗澡、整理", meaning: "回家或運動後洗澡、收拾。", type: "prep" },
       {
         term: "睡前準備",
-        meaning: "23:00 就寢前的準備，不再開始新任務。",
+        meaning: `${SLEEP_TIME} 就寢前的準備，不再開始新任務。`,
         type: "prep",
       },
       { term: "晚餐", meaning: "時間浮動，不要求固定開始。", type: "meal" },
@@ -148,7 +145,7 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
 
 /** 時間不夠時的取捨順序：越前面越要保住，越後面越先縮短或取消 */
 export const PRIORITY: { name: string; note: string }[] = [
-  { name: "睡眠", note: "23:00 就寢與睡前準備，不延後睡眠來補進度。" },
+  { name: "睡眠", note: `${SLEEP_TIME} 就寢與睡前準備，不延後睡眠來補進度。` },
   { name: "上課與通勤", note: "固定行程，不在這裡調整。" },
   { name: "吃飯與洗澡", note: "可以挪時間，不取消。" },
   { name: "當天最重要的一項任務", note: "通常是深度工作，週日是每週回顧。" },

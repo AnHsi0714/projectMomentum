@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-專案說明見 [README.md](README.md)
+專案說明見 [README.md](README.md)，開發細節（資料格式、檔案結構、設計與無障礙）見 [docs/development.md](docs/development.md)
 
 ## Commit 規則
 
