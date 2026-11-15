@@ -1,11 +1,16 @@
 import './styles/main.scss';
 import { render as paint, type TemplateResult } from 'lit-html';
 import { DAY_NAMES } from './config/schedule';
-import { initDrag, isDragging } from './drag';
-import { addRow, confirmDraft, isDirty, removeRow, reorderRows, resetRows, setField, startDraft } from './lib/draft';
-import { setRecover } from './lib/schedule';
+import { initStripDrag, isStripDragging } from './strip-drag';
+import { isBlockType, parseTimeInput, STEP_MIN } from './lib/blocks';
+import {
+  confirmDraft, draftConflicts, dropPending, insertRow, isDirty, moveRow, parkRow, removeRow, resetRows, resizeRow, restorePending,
+  setField, sortDraft, startDraft, toggleLock, type Draft, type Result,
+} from './lib/draft';
+import { endRunning, keepRunning, running, startFloat, startTask } from './lib/log';
+import { blocksFor, floatsFor, setRecover } from './lib/schedule';
 import { data, exportJson, importJson, load, save, setStatusListener, type SaveStatus } from './lib/store';
-import { addDays, currentTime, dkey, elapsedMinutes, fmtMD, isDone, isToday, mondayOf, pad, parseKey } from './lib/time';
+import { addDays, currentTime, dkey, elapsedMinutes, fmtMD, isDone, isToday, mondayOf, pad, parseKey, toMin } from './lib/time';
 import { currentRoute, isRouteHash, state, type ViewId } from './state';
 import { renderToday } from './views/today';
 import { renderReview } from './views/review';
@@ -91,7 +96,15 @@ function focusButton(act: string, index?: number): boolean {
   return true;
 }
 
-/** 把焦點放到某一列的欄位（名稱、開始時間） */
+/** 把焦點放到暫待區第 k 個任務的按鈕 */
+function focusPending(act: string, k: number): boolean {
+  const el = main.querySelector<HTMLButtonElement>(`button[data-act="${act}"][data-k="${k}"]`);
+  if (!el) return false;
+  focusStill(el);
+  return true;
+}
+
+/** 把焦點放到某一列的欄位（名稱、時間條上的任務） */
 function focusField(index: number, field: string): boolean {
   const el = main.querySelector<HTMLElement>(`#r${index}-${field}`);
   if (!el) return false;
@@ -114,79 +127,187 @@ function goToDate(date: Date, followToday: boolean): boolean {
   return true;
 }
 
-/** 把第 from 列移到第 to 列。用鍵盤移動時焦點跟著把手走；拖曳不移動焦點，免得手機跳出鍵盤 */
-function reorder(from: number, to: number, byKey = false) {
+/** 上一次播報時的衝突數，數量變了才再播報 */
+let lastClash = 0;
+
+/**
+ * 開始調整時記下目前的衝突數。之後拖動放開或按鍵移動時，數量有變才在 #conflict-live 播報，
+ * 拖動途中不播報，免得每移一格就唸一次。
+ */
+const resetClash = (d: Draft) => (lastClash = draftConflicts(d).length);
+
+function announceConflicts(): void {
   const d = state.draft;
   if (!d) return;
-  // 時間表上方的訊息換行數會變，連帶把整張表往上或往下推；記下表在畫面上的位置，最後補回去
-  const top = () => document.getElementById('timeline')?.getBoundingClientRect().top ?? 0;
-  const before = top();
-  const r = reorderRows(d, from, to);
-  render();
-  // 重畫後焦點會掉，用鍵盤移動時放回把手上：成功就跟到新位置，失敗留在原位
-  if (byKey) focusButton('move', r.ok ? (r.index ?? to) : from);
-  if (r.ok) setMessage('adjust-msg', r.message);
-  else setMessage('adjust-msg', r.error, true);
-  const shift = top() - before;
-  if (shift !== 0) window.scrollBy(0, shift);
+  const n = draftConflicts(d).length;
+  if (n === lastClash) return;
+  lastClash = n;
+  setMessage('conflict-live', n ? `有 ${n} 個衝突。` : '沒有衝突了，可以確認。');
 }
 
-/** 調整時間表上的各種按鈕。所有動作都只改草稿，按更新或保存才存檔 */
-function handleAction(act: string, index?: number) {
+/** 時間條比畫面寬時，捲到第 index 個任務，讓它出現在左邊 */
+function scrollStripTo(index: number): void {
+  const scroller = main.querySelector<HTMLElement>('.strip-scroll');
+  const seg = main.querySelectorAll<HTMLElement>('.seg')[index];
+  if (scroller && seg) scroller.scrollLeft += seg.getBoundingClientRect().left - scroller.getBoundingClientRect().left - 16;
+}
+
+/** 打開調整時間表，焦點放在 index 那個任務的名稱，時間條捲到它的位置 */
+function openDraft(index: number): Draft {
+  const sel = state.selDate;
+  const d = (state.draft = startDraft(dkey(sel), sel.getDay()));
+  resetClash(d);
+  render();
+  focusField(index, 'label') || focusStill($('#new-label'));
+  scrollStripTo(index);
+  return d;
+}
+
+/** 把焦點放到時間條上第 index 個任務；固定的任務不能選，改放到它的名稱欄 */
+function focusSeg(index: number, scroll = false): boolean {
+  const seg = main.querySelector<HTMLElement>(`#r${index}-time`);
+  if (!seg) return focusField(index, 'label');
+  focusStill(seg);
+  if (scroll) scrollStripTo(index);
+  return true;
+}
+
+/**
+ * 「現在」區塊的開始、結束按鈕：寫進實際紀錄並存檔，不經過調整時間表。
+ * 按完後焦點放回「現在」區塊的第一個按鈕（按鈕可能換了一組），沒有就放到頁面標題。
+ */
+function handleRun(act: string, ref: string | undefined, at: number | undefined) {
+  const now = currentTime();
+  const sel = state.selDate;
+  const dk = dkey(sel);
+  const blocks = blocksFor(dk, sel.getDay());
+  const floats = floatsFor(sel.getDay());
+  const r = running(dk);
+  let message = '';
+  if (act === 'start') {
+    const b = blocks.find(x => x.id === ref);
+    if (!b) return;
+    startTask(dk, b, now);
+    message = `${r && r.ref !== b.id ? `「${r.label}」已結束。` : ''}開始「${b.label}」。`;
+  } else if (act === 'float') {
+    const f = floats.find(x => x.id === ref);
+    if (!f) return;
+    startFloat(dk, f, now);
+    message = `${r ? `「${r.label}」先暫停，結束後可以繼續。` : ''}開始「${f.label}」。`;
+  } else if (act === 'end' || act === 'planned') {
+    if (!r) return;
+    endRunning(dk, now, act === 'planned' ? at : undefined);
+    message = `「${r.label}」已結束，接下來是休息，要開始下一個時再按開始。`;
+  } else if (act === 'keep') {
+    keepRunning(dk);
+    message = `好，「${r?.label ?? ''}」繼續進行，不再提醒。`;
+  }
+  render();
+  setMessage('hero-msg', message);
+  focusStill(main.querySelector<HTMLElement>('#now-card button') ?? $('#view-title'));
+}
+
+/** 把草稿操作的結果寫進訊息區 */
+const report = (r: Result) => (r.ok ? setMessage('adjust-msg', r.message) : setMessage('adjust-msg', r.error, true));
+
+/** 插入任務：讀表單、檢查，通過就插進草稿，焦點移到新任務的名稱。有問題就把焦點放到該修的欄位 */
+function insert(d: Draft) {
+  const field = (id: string) => main.querySelector<HTMLInputElement>(`#${id}`)!;
+  const label = field('new-label').value.trim();
+  const start = parseTimeInput(field('new-start').value);
+  const minutes = Number(field('new-len').value);
+  const type = field('new-type').value;
+  const fail = (id: string, text: string) => {
+    setMessage('adjust-msg', text, true);
+    focusStill(field(id));
+  };
+  if (!label) return fail('new-label', '請輸入要插入的任務名稱。');
+  if (!start) return fail('new-start', '開始時間請用 24 小時制，例如 1400 或 14:00。');
+  if (!Number.isInteger(minutes) || minutes < STEP_MIN) return fail('new-len', `長度至少 ${STEP_MIN} 分鐘，請填整數。`);
+  if (!isBlockType(type)) return fail('new-type', '請選擇類型。');
+  const r = insertRow(d, { label, type, start, minutes, locked: field('new-lock').checked });
+  if (!r.ok) return fail('new-start', r.error);
+  field('new-label').value = '';
+  render();
+  report(r);
+  if (r.index !== undefined && r.index >= 0) focusField(r.index, 'label');
+}
+
+/** 調整時間表上的各種按鈕。所有動作都只改草稿，按確認才存檔 */
+function handleAction(act: string, index?: number, k?: number) {
   const sel = state.selDate;
   const now = currentTime();
   const d = state.draft;
   if (!d) return;
 
-  if (act === 'add') {
-    const { index: at, start } = addRow(d, now);
+  if (act === 'insert') {
+    insert(d);
+    announceConflicts();
+  } else if (act === 'goto' && index !== undefined) {
+    focusSeg(index, true);
+  } else if (act === 'park' && index !== undefined) {
+    const r = parkRow(d, index);
     render();
-    const prev = d.blocks[at - 1];
-    setMessage(
-      'adjust-msg',
-      start
-        ? `已從現在 ${start} 插入一個任務${prev ? `，「${prev[2].trim() || '未命名的任務'}」改在這時結束` : ''}。請填入名稱，需要的話改開始時間。`
-        : '已在最後面新增一個任務，請填入名稱與開始時間。',
-    );
-    focusField(at, 'label');
+    report(r);
+    announceConflicts();
+    focusButton('park', index) || focusPending('restore', d.pending.length - 1) || focusButton('insert');
   } else if (act === 'delete' && index !== undefined) {
     const r = removeRow(d, index);
     render();
     if (!r.ok) return setMessage('adjust-msg', r.error, true);
     setMessage('adjust-msg', r.message);
-    // 刪掉之後同一個位置換成下一個任務；刪的是最後一個就放在新增鈕
-    focusButton('delete', index) || focusButton('add');
+    announceConflicts();
+    // 刪掉之後同一個位置換成下一個任務；刪的是最後一個就放在插入鈕
+    focusButton('delete', index) || focusButton('insert');
+  } else if (act === 'lock' && index !== undefined) {
+    const r = toggleLock(d, index);
+    render();
+    report(r);
+    focusButton('lock', index);
+  } else if ((act === 'restore' || act === 'drop') && k !== undefined) {
+    const r = act === 'restore' ? restorePending(d, k, now) : dropPending(d, k);
+    render();
+    report(r);
+    announceConflicts();
+    // 排回後焦點到那個任務的名稱；刪除或排不回時留在暫待區，暫待區空了就到插入鈕
+    if (r.ok && act === 'restore' && r.index !== undefined) focusField(r.index, 'label');
+    else focusPending(act, k) || focusPending('restore', 0) || focusButton('insert');
   } else if (act === 'reset') {
     resetRows(d, sel.getDay());
     render();
-    setMessage('adjust-msg', '已還原成原定時間表，按更新或保存後才會儲存。');
-    focusButton('add');
+    setMessage('adjust-msg', '已還原成原定時間表，暫待區也清空了。按確認後才會儲存。');
+    announceConflicts();
+    focusButton('insert');
   } else if (act === 'cancel') {
     if (isDirty(d) && !confirm('要放棄這次調整嗎？還沒確認的內容會消失。')) return;
     state.draft = null;
     render();
     $('#btn-adjust').focus({ preventScroll: true });
-  } else if (act === 'confirm' || act === 'finalize') {
-    // 更新：存起來，之後還能再調整。保存當天：存起來並定稿，不能再改，所以先問一次
-    const lock = act === 'finalize';
-    if (lock && !confirm('保存後這一天的時間表就定稿，之後不能再調整。要保存嗎？')) return;
-    const problems = confirmDraft(d, now, lock);
-    if (problems === 'expired') {
+  } else if (act === 'confirm') {
+    const r = confirmDraft(d, now);
+    if (r === 'expired') {
       setMessage('adjust-error', '這一天已經結束，調整沒有儲存。請按取消離開。', true);
       return;
     }
-    if (problems) {
+    if ('problems' in r) {
       render();
-      const rows = new Set(problems.map(p => p.index)).size;
+      const rows = new Set(r.problems.map(p => p.index)).size;
       setMessage('adjust-error', `有 ${rows} 個任務需要修正，原因已標在欄位旁邊。`, true);
-      focusField(problems[0].index, problems[0].field);
+      focusField(r.problems[0].index, r.problems[0].field);
+      return;
+    }
+    if ('conflicts' in r) {
+      render();
+      setMessage('adjust-error', `還有 ${r.conflicts.length} 個衝突，把任務拖開、縮短或移到暫待區之後才能確認。`, true);
+      const first = main.querySelector<HTMLElement>('.conflict-item');
+      if (first) focusStill(first);
       return;
     }
     state.draft = null;
     render();
-    setMessage('adjust-msg', lock ? '已保存並定稿這一天的時間表。' : '已更新這一天的時間表，之後還能再調整。');
-    // 定稿後調整鈕停用，拿不到焦點，改放回頁面標題
-    focusStill(lock ? $('#view-title') : $('#btn-adjust'));
+    const merged = r.merged ? `相鄰而且內容相同的任務已合併，少了 ${r.merged} 列。` : '';
+    setMessage('adjust-msg', `已更新這一天的時間表。${merged}`);
+    focusStill($('#btn-adjust'));
   }
 }
 
@@ -201,7 +322,7 @@ function tick() {
     return;
   }
   // 拖曳到一半不重畫，否則放開時的位置會算錯；下一次 tick 再更新
-  if (currentRoute() === 'today' && isToday(state.selDate) && !isDragging()) render();
+  if (currentRoute() === 'today' && isToday(state.selDate) && !isStripDragging()) render();
 }
 
 main.addEventListener('click', e => {
@@ -210,6 +331,7 @@ main.addEventListener('click', e => {
   const weekBtn = t.closest<HTMLElement>('[data-week]');
   const openDay = t.closest<HTMLElement>('[data-open-day]');
   const action = t.closest<HTMLElement>('[data-act]');
+  const run = t.closest<HTMLElement>('[data-run]');
 
   if (chip) {
     const date = parseKey(chip.dataset.d!);
@@ -224,16 +346,16 @@ main.addEventListener('click', e => {
     const date = parseKey(openDay.dataset.openDay!);
     if (goToDate(date, isToday(date))) location.hash = '#/today';
   } else if (t.closest('#btn-adjust')) {
+    // 焦點放在現在或接下來那個任務的名稱。整天都過了就放第一個任務；這一天沒有任務就放在插入任務的名稱欄
     const sel = state.selDate;
-    const d = (state.draft = startDraft(dkey(sel), sel.getDay()));
-    render();
-    // 焦點放在現在或接下來那個任務的名稱。不放時間欄位，那裡第一格是「上午／下午」，不是要改的地方。
-    // 整天都過了就放第一個任務；這一天沒有任務就放在新增鈕
-    const elapsed = elapsedMinutes(d.date, currentTime());
-    const next = d.blocks.findIndex(b => !isDone(b, elapsed));
-    focusField(Math.max(next, 0), 'label') || focusButton('add');
+    const elapsed = elapsedMinutes(dkey(sel), currentTime());
+    const next = blocksFor(dkey(sel), sel.getDay()).findIndex(b => !isDone(b, elapsed));
+    openDraft(Math.max(next, 0));
+  } else if (run) {
+    handleRun(run.dataset.run!, run.dataset.ref, run.dataset.at === undefined ? undefined : Number(run.dataset.at));
   } else if (action) {
-    handleAction(action.dataset.act!, action.dataset.i === undefined ? undefined : Number(action.dataset.i));
+    const num = (v: string | undefined) => (v === undefined ? undefined : Number(v));
+    handleAction(action.dataset.act!, num(action.dataset.i), num(action.dataset.k));
   } else if (t.closest('#btn-export')) {
     exportJson();
   } else if (t.closest('#btn-import')) {
@@ -243,12 +365,7 @@ main.addEventListener('click', e => {
 
 main.addEventListener('change', async e => {
   const t = e.target as HTMLInputElement;
-  if (t.dataset.h) {
-    const dk = dkey(state.selDate);
-    (data.checks[dk] ??= {})[t.dataset.h] = t.checked;
-    save();
-    render();
-  } else if (t.id === 'recover') {
+  if (t.id === 'recover') {
     setRecover(dkey(state.selDate), t.checked, currentTime());
     render();
   } else if (t.id === 'file-import' && t.files?.[0]) {
@@ -276,21 +393,56 @@ main.addEventListener('input', e => {
     const key = dkey(mondayOf(state.selDate));
     (data.reviews[key] ??= {})[t.dataset.q] = t.value;
     save();
-  } else if (state.draft && (t.dataset.f === 'label' || t.dataset.f === 'start' || t.dataset.f === 'type')) {
-    // 調整時間表的欄位：只更新草稿，不存檔、不重畫，打字不會被打斷
+  } else if (state.draft && (t.dataset.f === 'label' || t.dataset.f === 'type')) {
+    // 調整時間表的名稱與類型：只更新草稿，不存檔、不重畫，打字不會被打斷
     setField(state.draft, Number(t.dataset.i), t.dataset.f, t.value);
   }
 });
 
-initDrag(main, (from, to) => reorder(from, to));
+// 時間條：拖動任務整塊移動或改長度，每移一格就改草稿並重畫。拖動途中不重排，放開後才依時間重排並播報衝突
+initStripDrag(
+  main,
+  i => {
+    const b = state.draft?.blocks[i];
+    return b ? [b.start, b.end] : undefined;
+  },
+  (i, start) => {
+    if (!state.draft) return;
+    moveRow(state.draft, i, start);
+    render();
+  },
+  (i, end) => {
+    if (!state.draft) return;
+    resizeRow(state.draft, i, end);
+    render();
+  },
+  () => {
+    if (!state.draft) return;
+    sortDraft(state.draft);
+    render();
+    announceConflicts();
+  },
+);
 
-// 移動把手的鍵盤操作：上下鍵把這個任務往前或往後移一格
+// 時間條的鍵盤操作：焦點在任務上時左右鍵移動 5 分鐘，Page Up／Page Down 移動 30 分鐘，Shift 加左右鍵改長度。
+// 移動後依時間重排，焦點跟著這個任務走
+const KEY_STEP: Record<string, number> = { ArrowLeft: -STEP_MIN, ArrowRight: STEP_MIN, PageUp: -30, PageDown: 30 };
 main.addEventListener('keydown', e => {
   const t = e.target as HTMLElement;
-  if (t.dataset.act !== 'move' || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+  const d = state.draft;
+  const step = KEY_STEP[e.key];
+  if (!d || t.dataset.seg === undefined || step === undefined) return;
   e.preventDefault();
-  const i = Number(t.dataset.i);
-  reorder(i, i + (e.key === 'ArrowUp' ? -1 : 1), true);
+  const i = Number(t.dataset.seg);
+  const b = d.blocks[i];
+  if (!b) return;
+  const resize = e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight');
+  if (resize) resizeRow(d, i, toMin(b.end) + step);
+  else moveRow(d, i, toMin(b.start) + step);
+  const at = sortDraft(d, b);
+  render();
+  if (at !== i) focusSeg(at);
+  announceConflicts();
 });
 
 setStatusListener(s => {

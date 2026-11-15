@@ -68,7 +68,7 @@ export function elapsedMinutes(dateKey: string, now: Date): number {
 }
 
 /** 時段是否已經結束，結束時間就是已完成的界線 */
-export const isDone = (b: Block, elapsed: number) => toMin(b[1]) <= elapsed;
+export const isDone = (b: Pick<Block, 'end'>, elapsed: number) => toMin(b.end) <= elapsed;
 
 export type CurrentInfo =
   | { state: 'in'; idx: number; blocks: Block[]; m: number }
@@ -80,9 +80,9 @@ export type CurrentInfo =
 export function currentInfo(now: Date, blocks: Block[]): CurrentInfo {
   const m = now.getHours() * 60 + now.getMinutes();
   if (!blocks.length) return { state: 'empty', blocks, m };
-  const idx = blocks.findIndex(b => m >= toMin(b[0]) && m < toMin(b[1]));
+  const idx = blocks.findIndex(b => m >= toMin(b.start) && m < toMin(b.end));
   if (idx >= 0) return { state: 'in', idx, blocks, m };
-  const next = blocks.findIndex(b => m < toMin(b[0]));
+  const next = blocks.findIndex(b => m < toMin(b.start));
   if (next === 0) return { state: 'before', blocks, m };
   if (next > 0) return { state: 'gap', idx: next, blocks, m };
   return { state: 'after', blocks, m };

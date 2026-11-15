@@ -1,17 +1,21 @@
 import { html, type TemplateResult } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
-import { adjustBar, adjustEntry, adjustHint } from '../components/adjust';
+import { adjustBar, adjustEntry, adjustHint, insertForm } from '../components/adjust';
 import { dayChips } from '../components/day-chips';
+import { dayStrip } from '../components/day-strip';
 import { habitList } from '../components/habit-list';
 import { hero } from '../components/hero';
+import { pendingList } from '../components/pending';
 import { legend, timeline } from '../components/timeline';
 import { viewHead } from '../components/view-head';
 import { weekNav } from '../components/week-nav';
 import { RECOVER_NOTE } from '../config/habits';
 import { DAY_NAMES, DAY_THEME } from '../config/schedule';
-import { blocksFor, isConfirmed, isRecovering } from '../lib/schedule';
+import { settle } from '../lib/log';
+import { blocksFor, floatsFor, isConfirmed, isRecovering, pendingFor } from '../lib/schedule';
 import { data } from '../lib/store';
-import { currentTime, dkey, fmtMD, isToday, weekDates } from '../lib/time';
+import { SLEEP_MIN } from '../lib/blocks';
+import { currentTime, dkey, elapsedMinutes, fmtMD, fmtTime, isToday, weekDates } from '../lib/time';
 import { state } from '../state';
 
 // 「今天」頁：把元件組起來。每次都整頁重畫，lit-html 只會改動有變化的部分，
@@ -25,12 +29,19 @@ export function renderToday(): TemplateResult {
   const today = isToday(sel);
   const week = weekDates(sel);
   const blocks = blocksFor(dk, day);
+  const floats = floatsFor(day);
+  // 固定時段照時鐘走：正在進行的紀錄碰到固定時段或就寢就自動結束
+  settle(dk, blocks, now);
   const draft = state.draft?.date === dk ? state.draft : null;
-  // 過去的日子與已經定稿的日子不能調整
+  // 過去的日子與舊版定稿的日子不能調整
   const lockedNote =
     dk < dkey(now) ? '這一天已經結束，不能再調整。'
     : isConfirmed(dk) ? '這一天的時間表已經確認定稿，不能再調整。'
     : null;
+
+  // 插入任務的預設開始時間：今天是現在（進位到 5 分鐘），其他日子留空
+  const soon = Math.ceil(elapsedMinutes(dk, now) / 5) * 5;
+  const defaultStart = today && soon < SLEEP_MIN ? fmtTime(soon) : '';
 
   const title = html`${fmtMD(sel)} 週${DAY_NAMES[day]}${today ? html`<span class="badge badge-today">今天</span>` : ''}`;
 
@@ -42,13 +53,15 @@ export function renderToday(): TemplateResult {
         ? ''
         : html`<div class="banner" role="note"><p>正在查看 ${fmtMD(sel)}（週${DAY_NAMES[day]}），不是今天。</p><button type="button" class="btn" data-today>回到今天</button></div>`}
     </div>
-    ${today ? hero(now, dk, blocks) : ''}
-    <div class="today-grid">
+    ${today ? hero(now, dk, blocks, floats, !!draft) : ''}
+    <div class="today-grid ${draft ? 'is-adjusting' : ''}">
       <section class="sec">
         <div class="sec-head"><h2>時間表</h2>${legend()}</div>
         ${draft ? adjustHint() : adjustEntry(lockedNote)}
+        ${draft ? dayStrip(draft) : ''}
         ${timeline(dk, blocks, now, draft)}
-        ${draft ? adjustBar() : ''}
+        ${pendingList(draft ? draft.pending : pendingFor(dk), !!draft)}
+        ${draft ? html`${insertForm(defaultStart)}${adjustBar()}` : ''}
       </section>
       <div class="stack">
         <section class="sec">
@@ -59,8 +72,8 @@ export function renderToday(): TemplateResult {
           </div>
         </section>
         <section class="sec">
-          <h2>今日習慣</h2>
-          ${habitList(dk, week)}
+          <h2>今日達標</h2>
+          ${habitList(dk, now)}
         </section>
         <section class="sec field">
           <h2><label for="note">今日產出與進度</label></h2>

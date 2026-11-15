@@ -362,6 +362,47 @@
   font-variant-numeric: tabular-nums;
 }
 
+// 開始、結束、繼續按鈕，與超過預定時間時的提問：排在「現在」區塊下方，窄螢幕自動換行
+.hero-actions,
+.hero-floats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.hero-actions-label {
+  flex: 1 1 100%;
+  font-weight: 700;
+}
+
+// 浮動事項（吃飯、洗澡、假日起床）：細線隔開，和主要的按鈕分得出來
+.hero-floats {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.hero-floats-label {
+  flex: 1 1 100%;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+// 按鈕裡的補充說明：還剩多久、大約多長
+.hero-btn-note {
+  margin-left: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+// 調整時間表時先不開始或結束任務，按鈕藏起來
+.hero.is-adjusting .hero-actions {
+  display: none;
+}
+
 // 時間表
 
 .kind-focus {
@@ -519,17 +560,17 @@
   color: var(--text-muted);
 }
 
-// 調整中的任務：第一行是開始時間（已過的加標籤）與類型，第二行是名稱與刪除，
-// 名稱獨佔刪除以外的整行寬度才看得到內容。時間表很寬時才五樣排成一行，類型限制寬度讓給名稱
+// 調整中的任務：第一行是時間範圍與長度（已過、重疊的加標籤）與類型，第二行是名稱與按鈕，
+// 名稱獨佔按鈕以外的整行寬度才看得到內容。時間表很寬時才排成一行，類型限制寬度讓給名稱
 .slot-edit {
-  grid-template-columns: 2.75rem auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-areas:
-    'handle time type type'
-    'handle label label del'
-    'handle err err err';
+    'time type type'
+    'label label del'
+    'err err err';
   align-items: center;
   gap: 0.25rem 0.5rem;
-  padding: 0.375rem 0.75rem 0.375rem 0.25rem;
+  padding: 0.375rem 0.75rem;
   background: var(--surface);
 
   // 今天已經結束的任務：和平常的時間表一樣底色下沉，旁邊另有「已過」文字
@@ -538,10 +579,10 @@
   }
 
   @container (min-width: 48rem) {
-    grid-template-columns: 2.75rem auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
-      'handle time label type del'
-      '. err err err err';
+      'time label type del'
+      'err err err err';
 
     .edit-type select {
       max-width: 8rem;
@@ -550,7 +591,6 @@
 
   // 欄位平常只有一條底線，看起來像原本的文字；滑過時出現外框。底線與外框都用表單邊框色，達 3:1
   input[type='text'],
-  input[type='time'],
   select {
     padding: 0.25rem 0.375rem;
     border-color: transparent;
@@ -562,10 +602,8 @@
     }
   }
 
-  input[type='time'],
   select {
     width: auto;
-    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -576,6 +614,18 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem 0.5rem;
+}
+
+// 時間範圍用等寬數字，拖動時間條時字不會左右跳；長度是次要資訊
+.edit-when {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.edit-dur {
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .edit-label {
@@ -594,9 +644,16 @@
   }
 }
 
-.edit-del {
+.edit-tools {
   grid-area: del;
   justify-self: end;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.edit-del,
+.edit-park,
+.edit-lock {
   padding-inline: 0.75rem;
 }
 
@@ -614,6 +671,361 @@
 
   &:empty {
     display: none;
+  }
+}
+
+// 調整中的時間條：一天從左到右，每個任務一塊，任務之間是空白。
+// 可調整的任務按住整塊拖是移動，拖右邊緣是改長度；鎖定的任務是虛線框加「鎖定」字，拖不動。
+.day-strip {
+  --bar: 3.5rem;
+
+  margin-block: 0.75rem;
+
+  .hint {
+    margin-bottom: 0.5rem;
+  }
+}
+
+.strip-title {
+  font-weight: 700;
+}
+
+// 時間條比畫面寬時只有這一塊左右捲動，頁面本身不出現橫向捲軸。上下留空給焦點框
+.strip-scroll {
+  overflow-x: auto;
+  padding: 0.375rem 1.25rem 0;
+  border-block: 1px solid var(--line-strong);
+}
+
+// 任務重疊時分成幾排（--lanes），每排一條任務的高度，下面再留整點刻度的高度
+.strip-track {
+  position: relative;
+  min-width: 100%;
+  height: calc(var(--bar) * var(--lanes, 1) + 2rem);
+}
+
+// 任務與空白共用的位置與文字樣式。任務依 --lane 排在第幾排，空白佔滿每一排的高度
+.seg,
+.blank {
+  position: absolute;
+  top: calc(var(--bar) * var(--lane, 0));
+  height: var(--bar);
+  overflow: hidden;
+  padding: 0.25rem 0.375rem;
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+
+// 任務：類型的螢光筆底色，生活類用較深的底色，邊框用表單邊框色。
+// 不裁切超出的部分，浮出的名稱才能蓋到下方的刻度上；名稱本身由 .seg-label 裁切
+.seg {
+  overflow: visible;
+  border: 1px solid var(--line-strong);
+  background: var(--mark, var(--surface-2));
+  color: var(--text);
+  cursor: grab;
+  // 手指按在任務上左右拖是移動任務，上下滑仍是捲動頁面
+  touch-action: pan-y;
+  user-select: none;
+
+  &:hover {
+    border-color: var(--text);
+  }
+
+  &:focus-visible {
+    outline-offset: 1px;
+    z-index: 1;
+  }
+
+  // 拖動中：墨色粗框
+  &.is-dragging {
+    border: 2px solid var(--ink);
+    cursor: grabbing;
+    z-index: 1;
+  }
+
+  // 鎖定：虛線框，游標不提示可拖
+  &.is-locked {
+    border-style: dashed;
+    border-color: var(--text);
+    cursor: default;
+  }
+
+  // 和別的任務重疊：錯誤色粗框。重疊的任務本身也分成上下兩排，衝突清單另有文字，不只靠顏色
+  &.is-clash {
+    border: 2px solid var(--danger);
+  }
+}
+
+.seg-label {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+// 浮出的完整名稱與時間：滑鼠移上去、鍵盤選到或拖動時出現，暫時蓋住下方的整點刻度。
+// 短的任務寫不下名稱，靠這裡看；拖動時也能一邊看時間一邊拖
+.seg-pop {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: -1px;
+  z-index: 2;
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--text);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  white-space: nowrap;
+
+  &.is-end {
+    right: -1px;
+    left: auto;
+  }
+}
+
+.seg-pop-time {
+  margin-left: 0.5rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.seg:hover,
+.seg:focus-visible,
+.seg.is-dragging {
+  z-index: 1;
+
+  .seg-pop {
+    display: block;
+  }
+}
+
+.seg-lock {
+  position: absolute;
+  right: 0.25rem;
+  bottom: 0.125rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+// 改長度的把手：右邊緣 12px 寬的一條，中間兩條短線提示可以拉，游標變成左右箭頭
+.seg-grip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 0.75rem;
+  border-left: 1px solid var(--line-strong);
+  background: linear-gradient(to right, transparent 0.25rem, var(--ink) 0.25rem, var(--ink) 0.3125rem, transparent 0.3125rem,
+      transparent 0.4375rem, var(--ink) 0.4375rem, var(--ink) 0.5rem, transparent 0.5rem)
+    center / 100% 1rem no-repeat;
+  cursor: ew-resize;
+}
+
+// 空白：斜線底紋，和任務的實心底色分得開，不只靠顏色。一律寫休息
+.blank {
+  height: calc(var(--bar) * var(--lanes, 1));
+  border: 1px solid var(--line);
+  background: repeating-linear-gradient(-45deg, transparent 0 0.375rem, var(--line) 0.375rem 0.4375rem);
+  color: var(--text-muted);
+}
+
+// 整點刻度：短線加時間，24 小時制
+.strip-hours {
+  position: absolute;
+  inset: calc(var(--bar) * var(--lanes, 1)) 0 0;
+}
+
+.strip-hour {
+  position: absolute;
+  top: 0;
+  padding-top: 0.25rem;
+  transform: translateX(-50%);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 1px;
+    height: 0.25rem;
+    background: var(--line-strong);
+  }
+}
+
+// Windows 高對比模式：漸層與底色會被拿掉，空白改用虛線框、把手改用系統色
+@media (forced-colors: active) {
+  .blank {
+    border-style: dotted;
+  }
+
+  .seg-grip {
+    background: ButtonText;
+  }
+}
+
+// 時間表上的空白：斜線底紋與次要文字色，後面寫長度
+.slot-blank {
+  background: repeating-linear-gradient(-45deg, transparent 0 0.375rem, var(--line) 0.375rem 0.4375rem);
+  color: var(--text-muted);
+
+  .slot-label {
+    font-weight: 700;
+  }
+}
+
+.blank-dur {
+  margin-left: 0.5rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+// 時間條下面的衝突清單：有衝突時錯誤色粗框，每一項是按鈕，按下去選到那個任務
+.conflicts {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line-strong);
+
+  &.has-conflict {
+    border: 2px solid var(--danger);
+  }
+
+  .hint {
+    margin-bottom: 0.25rem;
+  }
+}
+
+.conflicts-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+}
+
+.conflicts-count {
+  color: var(--danger);
+}
+
+.conflict-list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conflict-item {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 2.75rem;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge-clash {
+  color: var(--danger);
+}
+
+.slot-edit.is-clash {
+  outline: 2px solid var(--danger);
+  outline-offset: -2px;
+}
+
+// 時間表上任務的實際時間：接在名稱後面，次要文字色。用 inline-block，名稱的螢光筆底線才不會延伸過來
+.slot-actual {
+  display: inline-block;
+  margin-left: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+// 暫待區
+.pending {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--line-strong);
+
+  .hint {
+    margin-bottom: 0.5rem;
+  }
+}
+
+.pending-title {
+  margin-bottom: 0.25rem;
+  font-size: 1rem;
+}
+
+.pending-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.25rem 0.75rem;
+    padding-block: 0.375rem;
+    border-top: 1px solid var(--line);
+  }
+}
+
+.pending-when {
+  margin-left: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pending-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+// 插入任務的表單：窄螢幕一欄一列，寬一點兩欄，再寬四欄
+.insert-form {
+  margin: 1rem 0 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line-strong);
+
+  legend {
+    padding-inline: 0.25rem;
+    font-weight: 700;
+  }
+
+  .hint {
+    margin-bottom: 0.5rem;
+  }
+}
+
+.insert-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-weight: 700;
+
+  input,
+  select {
+    font-weight: 400;
   }
 }
 
@@ -639,77 +1051,6 @@
   padding-bottom: 0.75rem;
   border-top: 2px solid var(--text);
   background: var(--bg);
-}
-
-// 移動把手：上下箭頭像電梯的按鈕。按住拖曳；焦點在上面時按上下鍵移動
-.drag-handle {
-  grid-area: handle;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  padding: 0;
-  border: 0;
-  border-radius: 2px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: grab;
-  // 觸控時不要被當成捲動，才能拖得動
-  touch-action: none;
-  user-select: none;
-
-  &:hover {
-    background: var(--surface-2);
-    color: var(--text);
-  }
-
-  // 只剩一個可調整的任務時沒有東西可以換，只保留位置讓欄位對齊
-  &.is-off {
-    cursor: default;
-  }
-
-  svg {
-    width: 0.75rem;
-    height: 1.25rem;
-    fill: currentcolor;
-  }
-}
-
-.slot {
-  position: relative;
-
-  // 被拖的列：底色下沉、虛線框
-  &.is-dragging {
-    background: var(--surface-2);
-    outline: 2px dashed var(--text);
-    outline-offset: -2px;
-  }
-
-  // 放開後會落在哪：目標列的上緣或下緣畫一條粗墨線
-  &.is-drop-before::before,
-  &.is-drop-after::after {
-    content: '';
-    position: absolute;
-    inset-inline: 0;
-    z-index: 1;
-    height: 4px;
-    background: var(--ink);
-  }
-
-  &.is-drop-before::before {
-    top: -2px;
-  }
-
-  &.is-drop-after::after {
-    bottom: -2px;
-  }
-}
-
-body.is-dragging,
-body.is-dragging * {
-  cursor: grabbing !important;
-  user-select: none;
 }
 
 // 側欄的「恢復模式」：一個勾選，附一句說明
@@ -785,6 +1126,15 @@ body.is-dragging * {
   font-weight: 700;
 }
 
+// 今日達標：沒有勾選框，名稱本身撐出和勾選列一樣的高度
+.goal-name {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-block: 0.25rem;
+}
+
 .habit-count {
   color: var(--text-muted);
   font-size: 0.875rem;
@@ -848,7 +1198,7 @@ textarea {
 }
 
 input[type='text'],
-input[type='time'],
+input[type='number'],
 select {
   display: block;
   width: 100%;
@@ -1123,17 +1473,15 @@ select {
     forced-color-adjust: none;
   }
 
-  .slot.is-current,
-  .slot.is-dragging {
+  .slot.is-current {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
 
-  // 放開位置的粗線靠背景畫出來，背景色會被系統拿掉，要明確指定系統色
-  .slot.is-drop-before::before,
-  .slot.is-drop-after::after {
-    background: Highlight;
-    forced-color-adjust: none;
+  // 重疊的列：高對比模式下改用系統文字色的虛線框
+  .slot-edit.is-clash {
+    outline: 2px dashed CanvasText;
+    outline-offset: -2px;
   }
 
   .wh-day.is-today {

@@ -4,20 +4,20 @@ import { viewHead } from '../components/view-head';
 import { weekNav, weekTitle } from '../components/week-nav';
 import { DAY_NAMES } from '../config/schedule';
 import { HABITS } from '../config/habits';
-import { weeklyCount } from '../lib/habits';
-import { data } from '../lib/store';
-import { dkey, isToday, weekDates } from '../lib/time';
+import { achieved, weeklyCount } from '../lib/habits';
+import { currentTime, dkey, isToday, weekDates } from '../lib/time';
 import { state } from '../state';
 
 export function renderWeek(): TemplateResult {
   const week = weekDates(state.selDate);
+  const now = currentTime();
 
   // 每個習慣一列：七個方格代表七天。完成是墨色實心加反白字，未完成是空心，不只靠顏色區分
   const rows = HABITS.map(h => {
-    const n = weeklyCount(h.id, week);
+    const n = weeklyCount(h.id, week, now);
     const done = n >= h.target;
     const days = week.map(d => {
-      const ok = !!data.checks[dkey(d)]?.[h.id];
+      const ok = achieved(dkey(d), h.id, now);
       const cls = ['wh-day', ok && 'is-done', isToday(d) && 'is-today'].filter(Boolean).join(' ');
       return html`<li class=${cls}><span aria-hidden="true">${DAY_NAMES[d.getDay()]}</span><span class="sr-only">週${DAY_NAMES[d.getDay()]}${isToday(d) ? '（今天）' : ''}${ok ? '完成' : '未完成'}</span></li>`;
     });

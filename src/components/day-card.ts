@@ -1,6 +1,7 @@
 import { html, type TemplateResult } from 'lit-html';
 import { DAY_NAMES, DAY_THEME } from '../config/schedule';
-import { blocksFor, blocksOfType, isAdjusted, isCanceled, wakeTime } from '../lib/schedule';
+import { wokeAt } from '../lib/log';
+import { blocksFor, blocksOfType, floatsFor, isAdjusted, isCanceled, plannedWake } from '../lib/schedule';
 import { dkey, fmtMD, isToday } from '../lib/time';
 import type { Block } from '../types';
 import { timeRange } from './time-range';
@@ -11,8 +12,8 @@ const none = html`<span class="fact-none">無</span>`;
 function times(dk: string, blocks: Block[], withLabel = false): TemplateResult {
   if (!blocks.length) return none;
   return html`${blocks.map(
-    b => html`<span class="fact-line"><span>${timeRange(b[0], b[1])}</span>${withLabel
-        ? html`<span class="fact-note">${b[2]}${isCanceled(dk, b) ? '（取消）' : ''}</span>`
+    b => html`<span class="fact-line"><span>${timeRange(b.start, b.end)}</span>${withLabel
+        ? html`<span class="fact-note">${b.label}${isCanceled(dk, b) ? '（取消）' : ''}</span>`
         : ''}</span>`,
   )}`;
 }
@@ -23,7 +24,10 @@ export function dayCard(d: Date): TemplateResult {
   const dk = dkey(d);
   const today = isToday(d);
   const blocks = blocksFor(dk, day);
-  const wake = wakeTime(blocks);
+  // 起床：假日按過「起床」就寫實際時間，旁邊附上目標；平日是固定時段，寫原定時間
+  const target = plannedWake(day);
+  const woke = wokeAt(dk, floatsFor(day));
+  const wake = woke ? html`${woke}${target && woke !== target ? html`<span class="fact-note">目標 ${target}</span>` : ''}` : target;
   const facts: [string, string | TemplateResult][] = [
     ['起床', wake ?? none],
     ['上課', times(dk, blocksOfType(blocks, 'class'))],

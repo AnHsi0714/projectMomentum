@@ -1,14 +1,21 @@
-import { html, type TemplateResult } from 'lit-html';
+import { html, nothing, type TemplateResult } from 'lit-html';
 import { KIND_OF } from '../config/kinds';
 import { SLEEP_TIME } from '../config/schedule';
+import { durOf, isLocked } from '../lib/blocks';
+import { cutTask, floatsLeft, logFor, nextTask, plannedEnd, remainingOf, running } from '../lib/log';
 import { isCanceled } from '../lib/schedule';
-import { currentInfo, fmtDur, toMin } from '../lib/time';
-import type { Block } from '../types';
+import { fmtDur, fmtTime, toMin } from '../lib/time';
+import type { Block, Entry, Float } from '../types';
 import { timeRange } from './time-range';
 
-// 「現在」區塊：現在是哪個時段、還剩多久、進度尺，以及接著是什麼。
+// 「現在」區塊：依實際紀錄顯示現在在做什麼。
+//   有任務或浮動事項在進行：名稱、已進行多久、進度尺、結束按鈕；超過預定長度太多時問還在不在做。
+//   固定時段（上課、通勤）照時鐘：名稱、還剩多久、進度尺，不用按。
+//   都沒有：休息，下面是下一個任務的開始按鈕，以及被打斷的任務的繼續按鈕。
+// 浮動事項（吃飯、洗澡、假日起床）的開始按鈕一直列在最下面，按下去會暫停正在做的任務。
+// 按鈕用 data-run 標示動作、data-ref 標示對象，由 main.ts 處理。
 
-const progress = (m: number, s: number, e: number) => Math.round(((m - s) / (e - s)) * 100);
+const progress = (m: number, s: number, e: number) => Math.min(100, Math.max(0, Math.round(((m - s) / (e - s)) * 100)));
 
 /** 刻度間隔（分鐘）：1 小時內每 5 分，2 小時內每 10 分，4 小時內每 30 分，更長每 1 小時 */
 const tickStep = (len: number) => (len <= 60 ? 5 : len <= 120 ? 10 : len <= 240 ? 30 : 60);
@@ -27,42 +34,106 @@ function ticks(s: number, e: number): TemplateResult[] {
   return out;
 }
 
-/** 正在某個時段裡：標題、時間、剩餘時間、進度尺與下一個時段 */
-function inBlock(m: number, dk: string, cur: Block, nxt: Block | undefined): TemplateResult {
-  const s = toMin(cur[0]);
-  const e = toMin(cur[1]);
+const meter = (m: number, s: number, e: number) =>
+  html`<div class="hero-meter" aria-hidden="true"><i style="width:${progress(m, s, e)}%"></i>${ticks(s, e)}</div>`;
+
+/** 超過預定長度的一半還沒按結束，就問還在不在做 */
+const OVER_RATIO = 1.5;
+
+/** 「接著」：下一個任務或就寢 */
+const nextLine = (nxt: Block | undefined) =>
+  html`<p class="hero-next">${nxt ? html`接著 <b>${nxt.start}</b> ${nxt.label}` : html`接著 <b>${SLEEP_TIME}</b> 就寢`}</p>`;
+
+/** 正在進行的任務或浮動事項：名稱、開始時間、已進行、進度尺、結束按鈕 */
+function runningBody(m: number, r: Entry, planEnd: number, nxt: Block | undefined): TemplateResult {
+  const s = toMin(r.start);
+  const planned = planEnd - s;
+  const over = m - planEnd;
+  const ask = !r.long && m - s > planned * OVER_RATIO;
+  const actions = ask
+    ? html`<div class="hero-actions" role="group" aria-label="還在做「${r.label}」嗎？">
+        <span class="hero-actions-label">已經超過預定時間 ${fmtDur(over)}，還在做「${r.label}」嗎？</span>
+        <button type="button" class="btn" data-run="keep">還在做</button>
+        <button type="button" class="btn" data-run="planned" data-at=${planEnd}>在預定時間 ${fmtTime(planEnd)} 結束</button>
+        <button type="button" class="btn" data-run="end">結束於現在</button>
+      </div>`
+    : html`<div class="hero-actions">
+        <button type="button" class="btn btn-solid" data-run="end">結束<span class="sr-only">「${r.label}」</span></button>
+      </div>`;
+  return html`<p class="hero-eyebrow">${r.float ? '進行中・浮動' : '進行中'}</p>
+    <h2 class="hero-title kind-${KIND_OF[r.type]}">${r.label}</h2>
+    <p class="hero-time">${r.start} 開始</p>
+    <p class="hero-count"><span class="hero-count-label">已進行</span> <span class="hero-count-value">${fmtDur(m - s)}</span></p>
+    ${meter(m, s, planEnd)}
+    <div class="hero-foot">
+      <p class="hero-meta"><span>${over > 0 ? `超過預定 ${fmtDur(over)}` : `預定 ${fmtDur(planned)}，還剩 ${fmtDur(-over)}`}</span></p>
+      ${r.float ? nothing : nextLine(nxt)}
+    </div>
+    ${actions}`;
+}
+
+/** 固定時段（上課、通勤）照時鐘：名稱、時間、還剩多久、進度尺 */
+function fixedBody(m: number, dk: string, cur: Block, nxt: Block | undefined): TemplateResult {
+  const s = toMin(cur.start);
+  const e = toMin(cur.end);
   const canceled = isCanceled(dk, cur);
-  // 被取消的時段和時間表一樣：加「取消」標記，標題劃線，不再上螢光筆
-  return html`<p class="hero-eyebrow">現在${canceled ? html`<span class="badge">取消</span>` : ''}</p>
-    <h2 class="hero-title kind-${KIND_OF[cur[3]]} ${canceled ? 'is-canceled' : ''}">${cur[2]}</h2>
-    <p class="hero-time">${timeRange(cur[0], cur[1])}</p>
+  return html`<p class="hero-eyebrow">現在・固定${canceled ? html`<span class="badge">取消</span>` : ''}</p>
+    <h2 class="hero-title kind-${KIND_OF[cur.type]} ${canceled ? 'is-canceled' : ''}">${cur.label}</h2>
+    <p class="hero-time">${timeRange(cur.start, cur.end)}</p>
     <p class="hero-count"><span class="hero-count-label">還剩</span> <span class="hero-count-value">${fmtDur(e - m)}</span></p>
-    <div class="hero-meter" aria-hidden="true"><i style="width:${progress(m, s, e)}%"></i>${ticks(s, e)}</div>
+    ${meter(m, s, e)}
     <div class="hero-foot">
       <p class="hero-meta"><span>已進行 ${fmtDur(m - s)}</span><span aria-hidden="true">・每格 ${fmtDur(tickStep(e - s))}</span></p>
-      <p class="hero-next">${nxt ? html`接著 <b>${nxt[0]}</b> ${nxt[2]}` : html`接著 <b>${SLEEP_TIME}</b> 就寢`}</p>
+      ${nextLine(nxt)}
     </div>`;
 }
 
-/** 「現在」區塊。只在看今天時顯示 */
-export function hero(now: Date, dk: string, blocks: Block[]): TemplateResult {
-  const info = currentInfo(now, blocks);
+/** 沒有在做任何事：休息。下面是下一個任務的開始按鈕，與被打斷的任務的繼續按鈕 */
+function restBody(m: number, dk: string, blocks: Block[], next: Block | undefined, cut: Block | undefined, started: boolean): TemplateResult {
+  const first = blocks[0];
+  const beforeDay = !started && first && m < toMin(first.start);
+  const late = next ? m - toMin(next.start) : 0;
+  const when = next ? (late > 0 ? `預定 ${next.start}，晚了 ${fmtDur(late)}` : late < 0 ? `預定 ${next.start}，還有 ${fmtDur(-late)}` : `預定 ${next.start}`) : '';
+  const buttons = [
+    cut
+      ? html`<button type="button" class="btn btn-solid" data-run="start" data-ref=${cut.id}>繼續「${cut.label}」<span class="hero-btn-note">還剩 ${fmtDur(remainingOf(dk, cut))}</span></button>`
+      : nothing,
+    next
+      ? html`<button type="button" class="btn ${cut ? '' : 'btn-solid'}" data-run="start" data-ref=${next.id}>開始「${next.label}」</button>`
+      : nothing,
+  ];
+  return html`<p class="hero-eyebrow">現在</p>
+    <h2 class="hero-title">${beforeDay ? '起床前' : '休息'}</h2>
+    <div class="hero-foot">
+      <p class="hero-next">${next ? html`下一個：<b>${next.label}</b>，${when}` : html`今天的任務都結束了，${SLEEP_TIME} 就寢。不延後睡眠來補進度。`}</p>
+    </div>
+    ${next || cut ? html`<div class="hero-actions">${buttons}</div>` : nothing}`;
+}
+
+/** 浮動事項的開始按鈕：吃飯、洗澡、假日起床。按下去會暫停正在做的任務 */
+function floatTools(items: Float[]): TemplateResult | typeof nothing {
+  if (!items.length) return nothing;
+  return html`<div class="hero-floats" role="group" aria-labelledby="float-title">
+    <span class="hero-floats-label" id="float-title">浮動事項</span>
+    ${items.map(f => html`<button type="button" class="btn" data-run="float" data-ref=${f.id}>開始「${f.label}」<span class="hero-btn-note">約 ${fmtDur(durOf(f))}</span></button>`)}
+  </div>`;
+}
+
+/**
+ * 「現在」區塊。只在看今天時顯示。adjusting 為 true 表示正在調整時間表，這時不顯示浮動事項，開始與結束按鈕由樣式藏起來。
+ * 訊息區一直都在，閱讀器才播報得到按下按鈕後的結果。
+ */
+export function hero(now: Date, dk: string, blocks: Block[], floats: Float[], adjusting = false): TemplateResult {
+  const m = now.getHours() * 60 + now.getMinutes();
+  const r = running(dk);
+  const next = nextTask(dk, blocks, now);
+  const fixed = blocks.find(b => isLocked(b) && toMin(b.start) <= m && m < toMin(b.end));
+  const upcoming = blocks.find(b => toMin(b.start) > m && !isLocked(b)) ?? next;
   let body: TemplateResult;
-  if (info.state === 'in') {
-    body = inBlock(info.m, dk, blocks[info.idx], blocks[info.idx + 1]);
-  } else if (info.state === 'before' || info.state === 'gap') {
-    const next = blocks[info.state === 'gap' ? info.idx : 0];
-    body = html`<p class="hero-eyebrow">${info.state === 'gap' ? '現在' : '尚未開始'}</p>
-      <h2 class="hero-title">${info.state === 'gap' ? '沒有安排' : '起床前'}</h2>
-      <div class="hero-foot"><p class="hero-next">${fmtDur(toMin(next[0]) - info.m)}後 <b>${next[0]}</b> ${next[2]}</p></div>`;
-  } else if (info.state === 'empty') {
-    body = html`<p class="hero-eyebrow">今天沒有安排</p>
-      <h2 class="hero-title">休息</h2>
-      <div class="hero-foot"><p class="hero-next">不延後睡眠來補進度。</p></div>`;
-  } else {
-    body = html`<p class="hero-eyebrow">今日時程已結束</p>
-      <h2 class="hero-title">${info.m < toMin(SLEEP_TIME) ? '準備睡覺' : '該就寢了'}</h2>
-      <div class="hero-foot"><p class="hero-next">不延後睡眠來補進度。</p></div>`;
-  }
-  return html`<section class="hero" id="now-card">${body}</section>`;
+  if (r) body = runningBody(m, r, plannedEnd(dk, r, blocks, floats), next);
+  else if (fixed) body = fixedBody(m, dk, fixed, upcoming);
+  else body = restBody(m, dk, blocks, next, cutTask(dk, blocks, now), logFor(dk).length > 0);
+  const tools = adjusting || (r && r.float) ? nothing : floatTools(floatsLeft(dk, floats));
+  return html`<section class="hero ${adjusting ? 'is-adjusting' : ''}" id="now-card">${body}${adjusting ? nothing : tools}
+    <p class="form-msg" id="hero-msg" role="status"></p></section>`;
 }

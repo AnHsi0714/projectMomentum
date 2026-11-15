@@ -97,8 +97,8 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
       },
       {
         term: "彈性時間",
-        meaning: "緩衝。前面的事延誤了就用來補，沒有延誤就休息。",
-        type: "rest",
+        meaning: "緩衝，時間表上的空白。前面的事延誤了就從這裡扣，沒有延誤就休息。",
+        type: null,
       },
       {
         term: "輕量任務",
@@ -109,8 +109,8 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
       {
         term: "自由時間",
         meaning:
-          "沒有安排，娛樂、社交、看影片都算，不必有產出。不把它當成罪惡，也不拿來補進度。",
-        type: "free",
+          "時間表上的空白，畫面上寫成休息。娛樂、社交、看影片都算，不必有產出，不把它當成罪惡。",
+        type: null,
       },
     ],
   },
@@ -130,7 +130,7 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
       },
       { term: "晚餐", meaning: "時間浮動，不要求固定開始。", type: "meal" },
       {
-        term: "早午餐、休息",
+        term: "早午餐",
         meaning: "週五到週日不吃早餐，併成早午餐。",
         type: "meal",
       },
@@ -154,8 +154,11 @@ export const PRIORITY: { name: string; note: string }[] = [
     note: "其餘的習慣，縮短比取消好。",
   },
   { name: "輕量任務", note: "可以延到別天。" },
-  { name: "彈性時間", note: "本來就是拿來吸收延誤的，最先用掉。" },
+  {
+    name: "空白（自由時間、彈性時間）",
+    note: "本來就是拿來吸收延誤的，任務晚開始或做太久，最先用掉的就是空白。",
+  },
 ];
 
 export const PRIORITY_NOTE =
-  "休息與自由時間不在這個順序裡：可以縮短，但不要整個取消，休息超時也不懲罰自己。身體不舒服時改用「今天」頁的恢復模式，先取消運動。";
+  "休息不在這個順序裡：可以縮短，但不要整個取消，休息超時也不懲罰自己。時間表只是參考，晚開始不用改；時間真的不夠時，照這個順序自己決定縮短、移到暫待區或今天不做。吃飯、洗澡是浮動事項，時間到了按開始就好。身體不舒服時改用「今天」頁的恢復模式，先取消運動。";
