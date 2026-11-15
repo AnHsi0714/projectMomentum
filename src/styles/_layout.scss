@@ -183,6 +183,11 @@
     gap: 2.5rem;
     align-items: start;
   }
+
+  // 調整時間表時改成單欄：時間表撐滿版面，時間條上的任務才寫得下名稱，習慣與筆記移到下面
+  &.is-adjusting {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .site-footer {

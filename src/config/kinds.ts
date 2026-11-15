@@ -14,7 +14,7 @@ export const KIND_OF: Record<BlockType, Kind> = {
   prep: 'life',
   meal: 'life',
   rest: 'life',
-  free: 'life',
+  event: 'life',
 };
 
 export const KINDS: { id: Kind; label: string }[] = [
@@ -37,5 +37,5 @@ export const TYPE_LABEL: Record<BlockType, string> = {
   prep: '起床、整理、睡前準備',
   meal: '用餐',
   rest: '休息',
-  free: '自由時間',
+  event: '臨時行程',
 };

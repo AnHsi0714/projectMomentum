@@ -1,6 +1,9 @@
 import { html } from 'lit-html';
 import { ADJUST_NOTE } from '../config/habits';
+import { TYPE_LABEL } from '../config/kinds';
 import { SLEEP_TIME } from '../config/schedule';
+import { LIFE_TYPES } from '../lib/blocks';
+import type { BlockType } from '../types';
 
 // 調整時間表的入口、操作說明與底部按鈕。按鈕的動作由 main.ts 依 data-act 處理。
 // 訊息區（.form-msg）不綁定內容，由 main.ts 直接寫入文字，每次重畫前清空。
@@ -16,16 +19,36 @@ export const adjustEntry = (lockedNote: string | null) => html`<div class="adjus
   <p class="form-msg" id="adjust-msg" role="status"></p>`;
 
 /** 調整中，時間表上方的操作說明 */
-export const adjustHint = () => html`<p class="hint" id="move-note">每列左邊的時間是<strong>開始時間</strong>，結束時間不用填：每個任務會延續到下一個任務開始，最後一個到 ${SLEEP_TIME} 就寢。新增的任務也只要填開始時間，會自動插進那個時間，前一個任務就在那時結束。按住左邊的上下箭頭拖曳可以調整先後，用鍵盤時把焦點移到箭頭上按上下鍵。儲存時會依開始時間自動排好。按「更新時間表」儲存後還能再調整，連已經結束的任務都能改；按「保存當天時間表」會儲存並<strong>定稿，這一天之後不能再調整</strong>。</p>
+export const adjustHint = () => html`<p class="hint" id="move-note">在下面的時間條拖動任務，改時間也改先後：任務可以拖過或蓋過別的任務，例如兩個任務要對調，先把一個拖到另一個上面，再把另一個拖回原位，中間的任務都不會動。重疊的地方會列成<strong>衝突</strong>，全部解開才能確認。任務之間沒排東西的地方是<strong>空白</strong>，寫成休息。<strong>固定</strong>的時段（上課、通勤、臨時行程、睡前準備）不能拖動。一天最晚到 ${SLEEP_TIME} 就寢。相鄰而且名稱、類型都相同的任務，儲存時會合併成一個。</p>
   <p class="form-msg" id="adjust-msg" role="status"></p>`;
 
-/** 調整中，時間表下方的新增，以及貼在視窗底部的確認與取消 */
-export const adjustBar = () => html`<div class="actions"><button type="button" class="btn" data-act="add">新增任務</button></div>
-  <div class="adjust-bar" role="group" aria-label="儲存或取消調整">
+/** 插入時可以選的類型：起床、吃飯、休息是浮動事項或空白，不能插入成任務 */
+const INSERT_TYPES = (Object.keys(TYPE_LABEL) as BlockType[]).filter(t => !LIFE_TYPES.has(t));
+
+/**
+ * 插入任務的表單。開始時間用文字欄位，24 小時制，打「1400」或「14:00」都可以，沒有上午、下午。
+ * 欄位沒有綁定值（預設值除外），重畫不會清掉使用者填到一半的內容；按下插入後由 main.ts 讀取。
+ */
+export const insertForm = (defaultStart: string) => html`<fieldset class="insert-form">
+    <legend>插入任務</legend>
+    <p class="hint" id="insert-note">例如臨時開會：填開始時間與長度。原本在這段時間的任務不會被推動，重疊的話會列成衝突，再自己拖開。</p>
+    <div class="insert-fields">
+      <label class="field-label" for="new-label">名稱<input type="text" id="new-label" maxlength="40" autocomplete="off" placeholder="例如：小組會議"></label>
+      <label class="field-label" for="new-start">開始（24 小時制）<input type="text" id="new-start" inputmode="numeric" autocomplete="off" placeholder="例如 1400" value=${defaultStart} aria-describedby="insert-note"></label>
+      <label class="field-label" for="new-len">長度（分鐘）<input type="number" id="new-len" min="5" max="600" step="5" value="60"></label>
+      <label class="field-label" for="new-type">類型<select id="new-type">
+        ${INSERT_TYPES.map(t => html`<option value=${t} ?selected=${t === 'event'}>${TYPE_LABEL[t]}</option>`)}
+      </select></label>
+    </div>
+    <label class="check-label" for="new-lock"><input type="checkbox" id="new-lock" checked><span>固定時間（開會這類不能移動的行程）</span></label>
+    <div class="actions"><button type="button" class="btn" data-act="insert">插入</button></div>
+  </fieldset>`;
+
+/** 調整中，貼在視窗底部的確認與取消。有衝突時確認照樣可以按，按下去會說明原因並帶到衝突清單 */
+export const adjustBar = () => html`<div class="adjust-bar" role="group" aria-label="儲存或取消調整">
     <p class="form-msg is-error" id="adjust-error" role="alert"></p>
     <div class="actions">
-      <button type="button" class="btn btn-solid" data-act="confirm">更新時間表</button>
-      <button type="button" class="btn" data-act="finalize">保存當天時間表</button>
+      <button type="button" class="btn btn-solid" data-act="confirm">確認</button>
       <button type="button" class="btn" data-act="cancel">取消</button>
       <button type="button" class="btn" data-act="reset">還原原定時間表</button>
     </div>

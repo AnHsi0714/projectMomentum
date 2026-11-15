@@ -45,6 +45,17 @@ const PAIRS = [
   ['ink', 'bg', UI, '選中與完成的實心格對頁面底色'],
   ['ink', 'surface', UI, '選中的實心格對內容面（進度條填色對主視覺）'],
   ['ink', 'surface-2', UI, '進度條填色對軌道'],
+  ['ink', 'mark-focus', UI, '時間條把手與改長度的線對螢光筆底色：專注'],
+  ['ink', 'mark-class', UI, '時間條把手與改長度的線對螢光筆底色：上課'],
+  ['ink', 'mark-move', UI, '時間條把手與改長度的線對螢光筆底色：運動'],
+  ['ink', 'mark-learn', UI, '時間條把手與改長度的線對螢光筆底色：英文與閱讀'],
+  ['danger', 'surface-2', UI, '重疊的外框在已過的列'],
+  ['danger', 'mark-focus', UI, '時間條上重疊任務的框對螢光筆底色：專注'],
+  ['danger', 'mark-class', UI, '時間條上重疊任務的框對螢光筆底色：上課'],
+  ['danger', 'mark-move', UI, '時間條上重疊任務的框對螢光筆底色：運動'],
+  ['danger', 'mark-learn', UI, '時間條上重疊任務的框對螢光筆底色：英文與閱讀'],
+  ['text-muted', 'line', TEXT, '空白的斜線底紋上的次要文字'],
+  ['text', 'line', TEXT, '空白的斜線底紋上的內文'],
 ];
 
 /** 取出 start 之後第一個大括號區塊的內容 */
