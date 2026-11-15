@@ -25,14 +25,15 @@ export interface Block {
 
 /**
  * 浮動事項：吃飯、洗澡、假日起床這類長度大致固定、但不知道什麼時候開始的事。
- * 不排在時間表上，按「開始」才開始，並暫停正在做的任務。start、end 是原定的大概時段。
+ * 不排在時間表上，按「開始」才開始，並暫停正在做的任務。minutes 是大概的長度，
+ * stage 是先後階段（起床 0，早午餐 1，洗澡與晚餐 2）。設定在 config/schedule.ts 的 FLOATS。
  */
 export interface Float {
   id: string;
   label: string;
   type: BlockType;
-  start: string;
-  end: string;
+  minutes: number;
+  stage: number;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { SCHEDULE } from '../config/schedule';
+import { SCHEDULE, WAKE_TARGET } from '../config/schedule';
 import type { Block, BlockType } from '../types';
 import { baseBlocks, sortBlocks } from './blocks';
 import { data, save } from './store';
@@ -24,8 +24,8 @@ export const isConfirmed = (dateKey: string): boolean => data.confirmed[dateKey]
 export const blocksOfType = (blocks: Block[], ...types: BlockType[]): Block[] =>
   blocks.filter(b => types.includes(b.type));
 
-/** 原定的起床時間：原定時間表的第一列 */
-export const plannedWake = (day: number): string | null => SCHEDULE[day][0]?.[0] ?? null;
+/** 原定的起床時間：假日看 WAKE_TARGET，平日是原定時間表的第一列（固定的起床時段） */
+export const plannedWake = (day: number): string | null => WAKE_TARGET[day] ?? SCHEDULE[day][0]?.[0] ?? null;
 
 // 恢復模式
 

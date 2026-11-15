@@ -1,7 +1,7 @@
 import { html, nothing, type TemplateResult } from 'lit-html';
 import { KIND_OF } from '../config/kinds';
 import { SLEEP_TIME } from '../config/schedule';
-import { durOf, isLocked } from '../lib/blocks';
+import { isLocked } from '../lib/blocks';
 import { cutTask, floatsLeft, logFor, nextTask, plannedEnd, remainingOf, running } from '../lib/log';
 import { isCanceled } from '../lib/schedule';
 import { fmtDur, fmtTime, toMin } from '../lib/time';
@@ -115,7 +115,7 @@ function floatTools(items: Float[]): TemplateResult | typeof nothing {
   if (!items.length) return nothing;
   return html`<div class="hero-floats" role="group" aria-labelledby="float-title">
     <span class="hero-floats-label" id="float-title">浮動事項</span>
-    ${items.map(f => html`<button type="button" class="btn" data-run="float" data-ref=${f.id}>開始「${f.label}」<span class="hero-btn-note">約 ${fmtDur(durOf(f))}</span></button>`)}
+    ${items.map(f => html`<button type="button" class="btn" data-run="float" data-ref=${f.id}>開始「${f.label}」<span class="hero-btn-note">約 ${fmtDur(f.minutes)}</span></button>`)}
   </div>`;
 }
 

@@ -1,6 +1,6 @@
 import { habitOf } from '../config/habits';
 import type { Block, Entry, Float } from '../types';
-import { durOf, floatStage, isLocked, isWake, SLEEP_MIN } from './blocks';
+import { durOf, isLocked, isWake, SLEEP_MIN } from './blocks';
 import { floatsFor, isCanceled, plannedWake } from './schedule';
 import { data, save } from './store';
 import { elapsedMinutes, fmtTime, parseKey, toMin } from './time';
@@ -63,13 +63,13 @@ export function cutTask(dk: string, blocks: Block[], now: Date): Block | undefin
 }
 
 /**
- * 還沒做的浮動事項：開始過的不再列出；後面階段的做過了，前面階段的也不列（見 floatStage）。
+ * 還沒做的浮動事項：開始過的不再列出；後面階段（stage）的做過了，前面階段的也不列。
  * 今天已經開始過任何事，就是起床了，不再列起床。
  */
 export function floatsLeft(dk: string, floats: Float[]): Float[] {
   const done = floats.filter(f => entriesOf(dk, f.id).length);
-  const stage = Math.max(logFor(dk).length ? 1 : 0, ...done.map(floatStage));
-  return floats.filter(f => !done.includes(f) && floatStage(f) >= stage);
+  const stage = Math.max(logFor(dk).length ? 1 : 0, ...done.map(f => f.stage));
+  return floats.filter(f => !done.includes(f) && f.stage >= stage);
 }
 
 /** 實際的起床時間：按過「起床」的開始時間；沒按起床就直接開始別的事，用今天第一筆紀錄的開始時間。平日起床是固定時段，回傳 undefined */
@@ -177,7 +177,7 @@ export function keepRunning(dk: string): void {
  */
 export function plannedEnd(dk: string, e: Entry, blocks: Block[], floats: Float[]): number {
   const plan = e.float ? floats.find(f => f.id === e.ref) : blocks.find(b => b.id === e.ref);
-  const left = plan ? (e.float ? durOf(plan) : remainingOf(dk, plan as Block)) : 0;
+  const left = !plan ? 0 : 'minutes' in plan ? plan.minutes : remainingOf(dk, plan);
   return toMin(e.start) + Math.max(left, 5);
 }
 

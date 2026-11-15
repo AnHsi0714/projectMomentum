@@ -3,7 +3,7 @@ import {
   baseBlocks, blanks, conflicts, copyBlock, dayProblems, durOf, isBlockType, isLocked, LIFE_TYPES, mergeSame, moveBlock, newId,
   resizeBlock, SLEEP_MIN, sortBlocks, STEP_MIN, withLock, type Conflict, type Problem,
 } from './blocks';
-import { applyDay, blocksFor, pendingFor } from './schedule';
+import { applyDay, blocksFor, pendingFor, plannedWake } from './schedule';
 import { dkey, elapsedMinutes, fmtTime, toMin } from './time';
 
 /**
@@ -60,7 +60,10 @@ export function sortDraft(d: Draft, keep?: Block): number {
 export function stripStart(d: Draft): number {
   const hour = (b: Block | undefined) => (b ? Math.floor(toMin(b.start) / 60) * 60 : SLEEP_MIN);
   const first = d.blocks.reduce<Block | undefined>((a, b) => (!a || toMin(b.start) < toMin(a.start) ? b : a), undefined);
-  return Math.max(0, Math.min(hour(d.original[0]) - 60, hour(first)));
+  // 假日起床是浮動事項，不在時間表上：從起床準備完的整點開始，早上的任務才拖得到更早
+  const wake = plannedWake(new Date(`${d.date}T00:00`).getDay());
+  const afterWake = wake ? Math.floor((toMin(wake) + 30) / 60) * 60 : SLEEP_MIN;
+  return Math.max(0, Math.min(hour(d.original[0]), hour(first), afterWake));
 }
 
 /**

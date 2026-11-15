@@ -1,5 +1,5 @@
 import { TYPE_LABEL } from '../config/kinds';
-import { SCHEDULE, SLEEP_TIME } from '../config/schedule';
+import { FLOATS, SCHEDULE, SLEEP_TIME } from '../config/schedule';
 import type { Block, BlockType, Float, Row } from '../types';
 import { fmtTime, toMin } from './time';
 
@@ -40,9 +40,6 @@ export const newId = (): string => `t${Date.now().toString(36)}${Math.random().t
 /** 沒有特別設定時，這些類型的任務是鎖定的：時間由別人決定，照時鐘自動開始與結束 */
 const LOCKED_TYPES: ReadonlySet<BlockType> = new Set(['class', 'commute', 'event']);
 
-/** 沒鎖定時是浮動事項的類型：起床、洗澡、吃飯 */
-export const FLOAT_TYPES: ReadonlySet<BlockType> = new Set(['prep', 'meal']);
-
 /** 不能當成任務類型的生活類型：起床、洗澡、吃飯是浮動事項，休息是空白 */
 export const LIFE_TYPES: ReadonlySet<BlockType> = new Set(['prep', 'meal', 'rest']);
 
@@ -63,33 +60,14 @@ function fromRow(row: Row, id: string): Block {
   return locked === undefined ? b : withLock(b, locked);
 }
 
-/** 原定時間表的一列是哪一種：固定與任務放進時間表，浮動事項另外列，休息是空白 */
-const rowKind = (row: Row): 'block' | 'float' | 'blank' => {
-  const locked = row[4] ?? defaultLocked(row[3]);
-  if (locked) return 'block';
-  if (FLOAT_TYPES.has(row[3])) return 'float';
-  return row[3] === 'rest' ? 'blank' : 'block';
-};
-
 /** 星期 day 原定的時間表（固定與任務），id 是 p 加上列的位置 */
-export const baseBlocks = (day: number): Block[] =>
-  SCHEDULE[day].flatMap((row, i) => (rowKind(row) === 'block' ? [fromRow(row, `p${i}`)] : []));
+export const baseBlocks = (day: number): Block[] => SCHEDULE[day].map((row, i) => fromRow(row, `p${i}`));
 
-/** 星期 day 的浮動事項（起床、洗澡、吃飯），依原定的開始時間排好 */
-export const floatsFor = (day: number): Float[] =>
-  SCHEDULE[day]
-    .flatMap((row, i): Float[] =>
-      rowKind(row) === 'float' ? [{ id: `f${i}`, label: row[2], type: row[3], start: row[0], end: row[1] }] : [])
-    .sort((a, b) => toMin(a.start) - toMin(b.start));
+/** 星期 day 的浮動事項（起床、洗澡、吃飯），依先後階段排好 */
+export const floatsFor = (day: number): Float[] => FLOATS[day].map(f => ({ ...f }));
 
-/** 浮動事項是不是起床：起床的時間會顯示在「本週」頁 */
-export const isWake = (f: Pick<Float, 'label'>): boolean => f.label.startsWith('起床');
-
-/**
- * 浮動事項的先後階段：起床 0，早午餐 1，其餘（洗澡、晚餐）2，同一階段的不分先後。
- * 後面階段的做過了，前面階段還沒做的就不用做了。
- */
-export const floatStage = (f: Pick<Float, 'label'>): number => (isWake(f) ? 0 : f.label.includes('早') ? 1 : 2);
+/** 浮動事項是不是起床：起床的時間會顯示在「本週」頁，也用來判斷起床是否達標 */
+export const isWake = (f: Pick<Float, 'id'>): boolean => f.id === 'wake';
 
 export const copyBlock = (b: Block): Block => ({ ...b });
 export const durOf = (b: Pick<Block, 'start' | 'end'>): number => toMin(b.end) - toMin(b.start);

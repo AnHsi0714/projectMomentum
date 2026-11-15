@@ -19,7 +19,14 @@ export const adjustEntry = (lockedNote: string | null) => html`<div class="adjus
   <p class="form-msg" id="adjust-msg" role="status"></p>`;
 
 /** 調整中，時間表上方的操作說明 */
-export const adjustHint = () => html`<p class="hint" id="move-note">在下面的時間條拖動任務，改時間也改先後：任務可以拖過或蓋過別的任務，例如兩個任務要對調，先把一個拖到另一個上面，再把另一個拖回原位，中間的任務都不會動。重疊的地方會列成<strong>衝突</strong>，全部解開才能確認。任務之間沒排東西的地方是<strong>空白</strong>，寫成休息。<strong>固定</strong>的時段（上課、通勤、臨時行程、睡前準備）不能拖動。一天最晚到 ${SLEEP_TIME} 就寢。相鄰而且名稱、類型都相同的任務，儲存時會合併成一個。</p>
+export const adjustHint = () => html`<ul class="hint hint-list" id="move-note">
+    <li>在下面的時間條拖動任務，改時間也改先後。</li>
+    <li>任務可以拖過或蓋過別的任務。兩個任務要對調時，先把一個拖到另一個上面，再把另一個拖回原位，中間的任務都不會動。</li>
+    <li>重疊的地方會列成<strong>衝突</strong>，全部解開才能確認。</li>
+    <li>任務之間沒排東西的地方是<strong>空白</strong>，寫成休息。</li>
+    <li><strong>固定</strong>的時段（上課、通勤、臨時行程、睡前準備）不能拖動。</li>
+    <li>一天最晚到 ${SLEEP_TIME} 就寢。相鄰而且名稱、類型都相同的任務，儲存時會合併成一個。</li>
+  </ul>
   <p class="form-msg" id="adjust-msg" role="status"></p>`;
 
 /** 插入時可以選的類型：起床、吃飯、休息是浮動事項或空白，不能插入成任務 */
