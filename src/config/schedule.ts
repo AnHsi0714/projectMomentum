@@ -116,22 +116,22 @@ const SHOWER: Float = {
   minutes: 50,
   stage: 2,
 };
-const dinner = (minutes: number): Float => ({
+const DINNER: Float = {
   id: "dinner",
   label: "晚餐",
   type: "meal",
-  minutes,
+  minutes: 70,
   stage: 2,
-});
+};
 
 export const FLOATS: Record<number, Float[]> = {
-  1: [SHOWER, dinner(50)],
-  2: [SHOWER, dinner(40)],
-  3: [SHOWER, dinner(40)],
-  4: [SHOWER, dinner(40)],
-  5: [WAKE, BRUNCH, SHOWER, dinner(70)],
-  6: [WAKE, BRUNCH, SHOWER, dinner(70)],
-  0: [WAKE, BRUNCH, SHOWER, dinner(70)],
+  1: [SHOWER, DINNER],
+  2: [SHOWER, DINNER],
+  3: [SHOWER, DINNER],
+  4: [SHOWER, DINNER],
+  5: [WAKE, BRUNCH, SHOWER, DINNER],
+  6: [WAKE, BRUNCH, SHOWER, DINNER],
+  0: [WAKE, BRUNCH, SHOWER, DINNER],
 };
 
 /**
