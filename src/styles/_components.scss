@@ -493,12 +493,12 @@
     border-bottom-color: var(--text);
   }
 
-  // 一般手機：時間與標籤同一行，徽章放在時間下方，標籤才不會被擠成兩行
+  // 一般手機：時間與標籤同一行，計畫與徽章放在標籤下方，標籤不會被擠成兩行，計畫的時間也有足夠的寬度
   @include from($bp-xs) {
     grid-template-columns: 6rem minmax(0, 1fr);
     grid-template-areas:
       'time label'
-      'badges label';
+      '. badges';
   }
 
   // 平板與桌面：徽章靠右
@@ -1005,14 +1005,12 @@
   outline-offset: -2px;
 }
 
-// 時間表上任務的實際時間：接在名稱後面，次要文字色。用 inline-block，名稱的螢光筆底線才不會延伸過來
-.slot-actual {
-  display: inline-block;
-  margin-left: 0.75rem;
+// 時間表右邊的計畫時間或「浮動」：次要文字色。「計畫」與時間一律在同一行
+.slot-plan {
   color: var(--text-muted);
   font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
-  text-decoration: none;
+  white-space: nowrap;
 }
 
 // 暫待區

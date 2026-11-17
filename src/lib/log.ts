@@ -45,12 +45,6 @@ export const spentOn = (dk: string, ref: string): number =>
 /** 任務還剩幾分鐘：預定長度減掉已經做的 */
 export const remainingOf = (dk: string, b: Block): number => Math.max(0, durOf(b) - spentOn(dk, b.id));
 
-/** 實際做的時間範圍：第一段開始到最後一段結束，還沒做就是 null */
-export function actualRange(dk: string, ref: string): [string, string | undefined] | null {
-  const es = entriesOf(dk, ref);
-  return es.length ? [es[0].start, es[es.length - 1].end] : null;
-}
-
 /** 下一個要做的任務：預定時間還沒過、還沒開始的第一個。時間過了沒開始的算沒做，不往後排；恢復模式取消的運動跳過 */
 export const nextTask = (dk: string, blocks: Block[], now: Date): Block | undefined =>
   blocks.find(b => !isLocked(b) && statusOf(dk, b, now) === 'todo' && !isCanceled(dk, b));
