@@ -1005,8 +1005,9 @@
   outline-offset: -2px;
 }
 
-// 時間表右邊的計畫時間或「浮動」：次要文字色。「計畫」與時間一律在同一行
-.slot-plan {
+// 時間表右邊的計畫時間或「浮動」，以及調整時的實際時間：次要文字色。「計畫」「實際」與時間一律在同一行
+.slot-plan,
+.edit-actual {
   color: var(--text-muted);
   font-size: 0.875rem;
   font-variant-numeric: tabular-nums;

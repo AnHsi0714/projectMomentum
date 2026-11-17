@@ -3,9 +3,9 @@ import { live } from 'lit-html/directives/live.js';
 import { KIND_OF, KINDS, TYPE_LABEL } from '../config/kinds';
 import { LIFE_TYPES, isLocked, SLEEP_MIN } from '../lib/blocks';
 import { draftConflicts, type Draft } from '../lib/draft';
-import { logFor, statusOf, type Status } from '../lib/log';
-import { isCanceled } from '../lib/schedule';
-import { dkey, elapsedMinutes, fmtDur, fmtTime, isDone, toMin } from '../lib/time';
+import { entriesOf, logFor, plannedEnd, statusOf, type Status } from '../lib/log';
+import { floatsFor, isCanceled } from '../lib/schedule';
+import { dkey, elapsedMinutes, fmtDur, fmtTime, isDone, parseKey, toMin } from '../lib/time';
 import type { Block, BlockType, Entry } from '../types';
 import { timeRange } from './time-range';
 
@@ -21,20 +21,28 @@ export const legend = () =>
  * 調整時一列可編輯的任務：時間與名稱，再來是類型、鎖定、移到暫待區與刪除。
  * 時間與先後都在上方的時間條（day-strip.ts）拖動來改，這裡只顯示目前的時間範圍與長度，邊拖邊更新。
  * 鎖定是切換按鈕（aria-pressed），鎖定的任務是固定時段，照時鐘走，不能拖動。欄位名稱只給閱讀器。
- * past 表示這個任務今天已經結束：底色下沉，並加上「已過」文字，不只靠顏色區分。
+ * 狀態和平常的時間表一樣：任務看實際紀錄標完成、進行中、中斷、沒做，有紀錄的附上實際的時間當參考；
+ * 固定時段照時鐘，今天結束了標「已過」。做完與沒做的底色下沉，並有文字標記，不只靠顏色區分。
  * clash 表示和別的任務重疊，加上「重疊」文字。類型選單不列生活類型，起床、吃飯是浮動事項，休息是空白，都不是任務。
  * 欄位的值用 live()，比對畫面上的實際值。
  */
-function editRow(d: Draft, i: number, past: boolean, clash: boolean): TemplateResult {
+function editRow(d: Draft, i: number, now: Date, clash: boolean): TemplateResult {
   const b = d.blocks[i];
   const mine = d.problems.filter(p => p.index === i);
   const name = b.label.trim() || '未命名的任務';
   const bad = (f: 'label' | 'time') => mine.some(p => p.field === f);
   const locked = isLocked(b);
+  const st = locked ? null : statusOf(d.date, b, now);
+  const past = st ? st === 'done' || st === 'missed' : d.date === dkey(now) && isDone(b, elapsedMinutes(d.date, now));
+  const badge = st ? STATUS_BADGE[st] : past ? '已過' : '';
+  const es = locked ? [] : entriesOf(d.date, b.id);
+  const last = es.at(-1);
   const dur = fmtDur(toMin(b.end) - toMin(b.start));
   const types = (Object.keys(TYPE_LABEL) as BlockType[]).filter(t => !LIFE_TYPES.has(t) || t === b.type);
   return html`<li class="slot slot-edit ${past ? 'is-past' : ''} ${mine.length ? 'has-error' : ''} ${locked ? 'is-locked' : ''} ${clash ? 'is-clash' : ''}" data-i=${i}>
-    <span class="edit-time"><span class="edit-when">${timeRange(b.start, b.end)}</span><span class="edit-dur">${dur}</span>${past ? html`<span class="badge">已過</span>` : ''}${clash ? html`<span class="badge badge-clash">重疊</span>` : ''}${bad('time') ? html`<span class="sr-only">（時間有問題）</span>` : ''}</span>
+    <span class="edit-time"><span class="edit-when">${timeRange(b.start, b.end)}</span><span class="edit-dur">${dur}</span>${es.length
+        ? html`<span class="edit-actual">實際 ${last?.end ? timeRange(es[0].start, last.end) : html`${es[0].start} 起`}</span>`
+        : ''}${badge ? html`<span class="badge">${badge}</span>` : ''}${clash ? html`<span class="badge badge-clash">重疊</span>` : ''}${bad('time') ? html`<span class="sr-only">（時間有問題）</span>` : ''}</span>
     <span class="edit-label"><label class="sr-only" for="r${i}-label">名稱</label><input type="text" id="r${i}-label" data-f="label" data-i=${i}
       aria-invalid=${bad('label') ? 'true' : nothing} aria-describedby=${bad('label') ? `r${i}-err` : nothing}
       maxlength="40" autocomplete="off" placeholder="任務名稱" .value=${live(b.label)}></span>
@@ -73,12 +81,13 @@ interface ViewItem {
  * 實際紀錄的一段：左邊是實際開始與結束，右邊是計畫的時間。
  * 浮動事項沒有計畫，右邊寫「浮動」。一個任務被浮動事項打斷再繼續，會分成兩段，各自一列。
  */
-function entryItem(dk: string, e: Entry, plan: Block | undefined, elapsed: number): ViewItem {
+function entryItem(dk: string, e: Entry, plan: Block | undefined, elapsed: number, expectedEnd: number): ViewItem {
   const st: Status = !e.end ? 'running' : e.cut ? 'cut' : 'done';
   const start = toMin(e.start);
   return {
     start,
-    end: e.end ? toMin(e.end) : Math.max(start, elapsed),
+    // 進行中的照實際開始加上預定長度往後推，例如晚 2 分鐘開始就晚 2 分鐘結束，後面的休息跟著從那時算起
+    end: e.end ? toMin(e.end) : Math.max(expectedEnd, elapsed),
     type: e.type,
     label: plan?.label ?? e.label,
     time: e.end ? timeRange(e.start, e.end) : html`${e.start} 起`,
@@ -137,9 +146,12 @@ function viewItems(dk: string, blocks: Block[], now: Date): ViewItem[] {
   const today = dk === dkey(now);
   const elapsed = elapsedMinutes(dk, now);
   const log = logFor(dk);
+  const floats = floatsFor(parseKey(dk).getDay());
   const logged = new Set(log.map(e => e.ref));
   const items = [
-    ...log.map(e => entryItem(dk, e, e.float ? undefined : blocks.find(b => b.id === e.ref), elapsed)),
+    ...log.map(e =>
+      entryItem(dk, e, e.float ? undefined : blocks.find(b => b.id === e.ref), elapsed, e.end ? 0 : plannedEnd(dk, e, blocks, floats)),
+    ),
     ...blocks.filter(b => !logged.has(b.id)).map(b => planItem(dk, b, now, today, elapsed)),
   ];
   return items.sort((a, b) => a.start - b.start);
@@ -167,10 +179,8 @@ export function timeline(dk: string, blocks: Block[], now: Date, draft: Draft | 
   let items: TemplateResult[];
   if (draft) {
     const clash = new Set(draftConflicts(draft).flatMap(c => [c.a, c.b]));
-    const today = dk === dkey(now);
-    const elapsed = elapsedMinutes(dk, now);
-    const rows = draft.blocks.map(b => ({ b, start: toMin(b.start), end: toMin(b.end) }));
-    items = withBlanks(rows, (r, i) => editRow(draft, i, today && isDone(r.b, elapsed), clash.has(i)));
+    const rows = draft.blocks.map(b => ({ start: toMin(b.start), end: toMin(b.end) }));
+    items = withBlanks(rows, (_, i) => editRow(draft, i, now, clash.has(i)));
   } else {
     items = withBlanks(viewItems(dk, blocks, now), viewRow);
   }

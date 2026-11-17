@@ -152,10 +152,16 @@ function scrollStripTo(index: number): void {
   if (scroller && seg) scroller.scrollLeft += seg.getBoundingClientRect().left - scroller.getBoundingClientRect().left - 16;
 }
 
-/** 打開調整時間表，焦點放在 index 那個任務的名稱，時間條捲到它的位置 */
-function openDraft(index: number): Draft {
+/**
+ * 打開調整時間表，焦點放在現在或接下來那個任務的名稱，時間條捲到它的位置。
+ * 草稿裡有紀錄的任務換成了實際的時間，順序可能變，所以用草稿找位置。整天都過了就放第一個任務
+ */
+function openDraft(): Draft {
   const sel = state.selDate;
-  const d = (state.draft = startDraft(dkey(sel), sel.getDay()));
+  const now = currentTime();
+  const d = (state.draft = startDraft(dkey(sel), sel.getDay(), now));
+  const elapsed = elapsedMinutes(d.date, now);
+  const index = Math.max(d.blocks.findIndex(b => !isDone(b, elapsed)), 0);
   resetClash(d);
   render();
   focusField(index, 'label') || focusStill($('#new-label'));
@@ -346,11 +352,8 @@ main.addEventListener('click', e => {
     const date = parseKey(openDay.dataset.openDay!);
     if (goToDate(date, isToday(date))) location.hash = '#/today';
   } else if (t.closest('#btn-adjust')) {
-    // 焦點放在現在或接下來那個任務的名稱。整天都過了就放第一個任務；這一天沒有任務就放在插入任務的名稱欄
-    const sel = state.selDate;
-    const elapsed = elapsedMinutes(dkey(sel), currentTime());
-    const next = blocksFor(dkey(sel), sel.getDay()).findIndex(b => !isDone(b, elapsed));
-    openDraft(Math.max(next, 0));
+    // 這一天沒有任務時，焦點放在插入任務的名稱欄（見 openDraft）
+    openDraft();
   } else if (run) {
     handleRun(run.dataset.run!, run.dataset.ref, run.dataset.at === undefined ? undefined : Number(run.dataset.at));
   } else if (action) {

@@ -1,6 +1,6 @@
 import { habitOf } from '../config/habits';
 import type { Block, Entry, Float } from '../types';
-import { durOf, isLocked, isWake, SLEEP_MIN } from './blocks';
+import { durOf, isLocked, isWake, SLEEP_MIN, STEP_MIN } from './blocks';
 import { floatsFor, isCanceled, plannedWake } from './schedule';
 import { data, save } from './store';
 import { elapsedMinutes, fmtTime, parseKey, toMin } from './time';
@@ -173,6 +173,27 @@ export function plannedEnd(dk: string, e: Entry, blocks: Block[], floats: Float[
   const plan = e.float ? floats.find(f => f.id === e.ref) : blocks.find(b => b.id === e.ref);
   const left = !plan ? 0 : 'minutes' in plan ? plan.minutes : remainingOf(dk, plan);
   return toMin(e.start) + Math.max(left, 5);
+}
+
+/**
+ * 調整時間表時，有實際紀錄的任務換成實際的時間（分鐘數），計畫才不會停在原本的時間。
+ *   做完的：第一段開始到最後一段結束。
+ *   進行中的：第一段開始到預計結束（實際開始加上還剩的長度），超過了就到現在。
+ *   被浮動事項打斷的：假設現在接著做，現在加上還剩的長度。
+ * 沒有紀錄、或是固定時段，回傳 null，照原本的計畫。
+ */
+export function actualSpan(dk: string, b: Block, blocks: Block[], floats: Float[], now: Date): [number, number] | null {
+  const es = entriesOf(dk, b.id);
+  const last = es.at(-1);
+  if (!last || isLocked(b)) return null;
+  const start = toMin(es[0].start);
+  const elapsed = elapsedMinutes(dk, now);
+  const end = !last.end
+    ? Math.max(plannedEnd(dk, last, blocks, floats), elapsed)
+    : last.cut
+      ? Math.max(toMin(last.end), elapsed) + remainingOf(dk, b)
+      : toMin(last.end);
+  return [start, Math.min(Math.max(end, start + STEP_MIN), SLEEP_MIN)];
 }
 
 /**

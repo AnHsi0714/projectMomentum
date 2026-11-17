@@ -3,7 +3,8 @@ import {
   baseBlocks, blanks, conflicts, copyBlock, dayProblems, durOf, isBlockType, isLocked, LIFE_TYPES, mergeSame, moveBlock, newId,
   resizeBlock, SLEEP_MIN, sortBlocks, STEP_MIN, withLock, type Conflict, type Problem,
 } from './blocks';
-import { applyDay, blocksFor, pendingFor, plannedWake } from './schedule';
+import { actualSpan } from './log';
+import { applyDay, blocksFor, floatsFor, pendingFor, plannedWake } from './schedule';
 import { dkey, elapsedMinutes, fmtTime, toMin } from './time';
 
 /**
@@ -31,8 +32,20 @@ export type Result = { ok: true; message: string; index?: number } | { ok: false
 const copy = (blocks: Block[]): Block[] => blocks.map(copyBlock);
 const nameOf = (b: Block) => b.label.trim() || '未命名的任務';
 
-export function startDraft(dateKey: string, day: number): Draft {
-  const blocks = copy(blocksFor(dateKey, day));
+/**
+ * 開始調整：有實際紀錄的任務先換成實際的時間（見 log.ts 的 actualSpan），
+ * 例如晚 30 分鐘開始，時間條上就從實際開始的地方畫起，後面的任務才不會排到還在做的時間。
+ * 換過的樣子就當成開始調整時的樣子，按確認後計畫才跟著實際對齊。
+ */
+export function startDraft(dateKey: string, day: number, now: Date): Draft {
+  const plan = blocksFor(dateKey, day);
+  const floats = floatsFor(day);
+  const blocks = sortBlocks(
+    plan.map(b => {
+      const span = actualSpan(dateKey, b, plan, floats, now);
+      return span ? { ...b, start: fmtTime(span[0]), end: fmtTime(span[1]) } : copyBlock(b);
+    }),
+  );
   const pending = copy(pendingFor(dateKey));
   return { date: dateKey, blocks, pending, original: copy(blocks), originalPending: copy(pending), problems: [] };
 }
