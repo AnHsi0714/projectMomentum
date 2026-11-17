@@ -15,7 +15,7 @@ import { settle } from '../lib/log';
 import { blocksFor, floatsFor, isConfirmed, isRecovering, pendingFor } from '../lib/schedule';
 import { data } from '../lib/store';
 import { SLEEP_MIN } from '../lib/blocks';
-import { currentTime, dkey, elapsedMinutes, fmtMD, fmtTime, isToday, weekDates } from '../lib/time';
+import { currentTime, dkey, elapsedMinutes, fmtMD, fmtTime, isToday, toMin, weekDates } from '../lib/time';
 import { state } from '../state';
 
 // 「今天」頁：把元件組起來。每次都整頁重畫，lit-html 只會改動有變化的部分，
@@ -39,8 +39,14 @@ export function renderToday(): TemplateResult {
     : isConfirmed(dk) ? '這一天的時間表已經確認定稿，不能再調整。'
     : null;
 
+  // 恢復模式只會取消還沒結束的運動，所以那天還有運動才顯示；已經啟用的一直顯示，才能關掉。
+  // 剛切換過的也留著，見 state.recoverTouched
+  const elapsed = elapsedMinutes(dk, now);
+  const showRecover =
+    isRecovering(dk) || state.recoverTouched === dk || blocks.some(b => b.type === 'exercise' && toMin(b.end) > elapsed);
+
   // 插入任務的預設開始時間：今天是現在（進位到 5 分鐘），其他日子留空
-  const soon = Math.ceil(elapsedMinutes(dk, now) / 5) * 5;
+  const soon = Math.ceil(elapsed / 5) * 5;
   const defaultStart = today && soon < SLEEP_MIN ? fmtTime(soon) : '';
 
   const title = html`${fmtMD(sel)} 週${DAY_NAMES[day]}${today ? html`<span class="badge badge-today">今天</span>` : ''}`;
@@ -64,13 +70,15 @@ export function renderToday(): TemplateResult {
         ${draft ? html`${insertForm(defaultStart)}${adjustBar()}` : ''}
       </section>
       <div class="stack">
-        <section class="sec">
-          <h2>恢復模式</h2>
-          <div class="tool">
-            <label class="check-label" for="recover"><input type="checkbox" id="recover" aria-describedby="recover-note" .checked=${live(isRecovering(dk))}><span>啟用恢復模式</span></label>
-            <p class="hint" id="recover-note">${RECOVER_NOTE}</p>
-          </div>
-        </section>
+        ${showRecover
+          ? html`<section class="sec">
+              <h2>恢復模式</h2>
+              <div class="tool">
+                <label class="check-label" for="recover"><input type="checkbox" id="recover" aria-describedby="recover-note" .checked=${live(isRecovering(dk))}><span>啟用恢復模式</span></label>
+                <p class="hint" id="recover-note">${RECOVER_NOTE}</p>
+              </div>
+            </section>`
+          : ''}
         <section class="sec">
           <h2>今日達標</h2>
           ${habitList(dk, now)}

@@ -369,7 +369,8 @@ main.addEventListener('click', e => {
 main.addEventListener('change', async e => {
   const t = e.target as HTMLInputElement;
   if (t.id === 'recover') {
-    setRecover(dkey(state.selDate), t.checked, currentTime());
+    state.recoverTouched = dkey(state.selDate);
+    setRecover(state.recoverTouched, t.checked, currentTime());
     render();
   } else if (t.id === 'file-import' && t.files?.[0]) {
     if (!confirm('匯入會覆蓋目前所有紀錄，確定要繼續嗎？')) {

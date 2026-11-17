@@ -9,10 +9,16 @@ export const state: {
   followToday: boolean;
   /** 正在調整的那一天的草稿。有草稿就是調整模式，按更新或保存才存檔，不寫進資料檔 */
   draft: Draft | null;
+  /**
+   * 剛切換過恢復模式的日期。恢復模式平常只在還有運動時顯示，
+   * 但剛關掉時要留著，開關才不會在操作當下消失、焦點跟著不見；重新整理後才收起來
+   */
+  recoverTouched: string | null;
 } = {
   selDate: new Date(),
   followToday: true,
   draft: null,
+  recoverTouched: null,
 };
 
 let lastRoute: ViewId = 'today';
