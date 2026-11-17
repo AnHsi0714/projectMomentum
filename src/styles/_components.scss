@@ -1476,14 +1476,9 @@ select {
   display: grid;
 }
 
-.fact-note,
-.fact-none {
+.fact-note {
   color: var(--text-muted);
   font-size: 0.875rem;
-}
-
-.fact-none {
-  font-size: 1rem;
 }
 
 // 轉場只在使用者沒有要求減少動態時啟用
