@@ -945,6 +945,40 @@
   .slot-label {
     font-weight: 700;
   }
+
+  // 已過與現在的休息保留斜線，只換底色，和其他列一樣看得出時間走到哪裡
+  &.is-past {
+    background:
+      repeating-linear-gradient(-45deg, transparent 0 0.375rem, var(--line) 0.375rem 0.4375rem),
+      var(--surface-2);
+  }
+
+  &.is-current {
+    background:
+      repeating-linear-gradient(-45deg, transparent 0 0.375rem, var(--line) 0.375rem 0.4375rem),
+      var(--surface);
+  }
+
+  // 標記蓋在斜線上，給實心底色，文字對比才不受斜線影響
+  .badge {
+    background: var(--surface);
+  }
+}
+
+// 時間表下面的補記：平常收合，展開後是和插入任務相同的表單
+.backfill {
+  margin-top: 1rem;
+
+  summary {
+    width: fit-content;
+    padding-block: 0.25rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .insert-form {
+    margin-top: 0.5rem;
+  }
 }
 
 .blank-dur {

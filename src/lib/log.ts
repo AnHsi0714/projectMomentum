@@ -10,6 +10,7 @@ import { elapsedMinutes, fmtTime, parseKey, toMin } from './time';
 //   按了結束：之後到下一個開始之前都是休息。
 //   浮動事項（吃飯、洗澡）按開始時，正在做的任務先中斷，之後可以按「繼續」接著做；不按就是休息。
 //   固定時段（上課、通勤、睡前準備）照時鐘走，不用按；它開始時，正在進行的紀錄自動結束。
+//   忘了按的可以事後補記（backfill），只能補已經結束、和其他紀錄不重疊的一段。
 // 習慣是否達標只看實際紀錄：同一個習慣有任務按了結束就算達標；起床依起床時間自動判斷。
 
 /** 一個任務今天的狀態。missed 是預定時間已經過了還沒開始（用 id 查時，看的是就寢時間） */
@@ -164,6 +165,40 @@ export function keepRunning(dk: string): void {
   if (!r) return;
   r.long = true;
   save();
+}
+
+/** 補記的對象：時間表上的任務，或是浮動事項 */
+export interface BackfillItem {
+  ref: string;
+  label: string;
+  type: Entry['type'];
+  float: boolean;
+}
+
+/**
+ * 補記一段忘了按的實際紀錄，start、end 是分鐘數。成功回傳 null，失敗回傳原因與該修的欄位。
+ *   結束要晚於開始，也不能晚於現在（過去的日子不限）。
+ *   不能和已有的紀錄重疊，進行中的那一段算到現在。
+ *   依開始時間插進紀錄，狀態、起床時間與習慣達標都照順序判斷。任務補記完就算做完，勾選它的習慣。
+ */
+export function backfill(dk: string, item: BackfillItem, start: number, end: number, now: Date): { field: 'start' | 'end'; message: string } | null {
+  const elapsed = elapsedMinutes(dk, now);
+  if (end <= start) return { field: 'end', message: '結束時間要晚於開始時間。' };
+  if (end > elapsed) return { field: 'end', message: `結束時間不能晚於現在（${fmtTime(elapsed)}）。還在做的請用「現在」區塊的開始按鈕。` };
+  const log = logFor(dk);
+  const clash = log.find(e => start < (e.end ? toMin(e.end) : elapsed) && toMin(e.start) < end);
+  if (clash) {
+    const span = clash.end ? `${clash.start} 到 ${clash.end}` : `${clash.start} 起`;
+    return { field: 'start', message: `和已有的紀錄「${clash.label}」（${span}）重疊，請換個時間。` };
+  }
+  const e: Entry = { ref: item.ref, label: item.label, type: item.type, start: fmtTime(start), end: fmtTime(end) };
+  if (item.float) e.float = true;
+  const at = log.findIndex(x => toMin(x.start) > start);
+  if (!data.log[dk]) data.log[dk] = [e];
+  else data.log[dk].splice(at < 0 ? log.length : at, 0, e);
+  if (!item.float) autoCheck(dk, e);
+  save();
+  return null;
 }
 
 /**

@@ -109,13 +109,15 @@ function planItem(dk: string, b: Block, now: Date, today: boolean, elapsed: numb
   const task = !isLocked(b);
   const st = task ? statusOf(dk, b, now) : null;
   const current = !task && today && start <= elapsed && elapsed < end;
+  // 現在已經到了預定時間卻還沒按開始，標出來，不然這段時間看起來像是什麼都沒發生
+  const due = st === 'todo' && today && start <= elapsed;
   return {
     start,
     end,
     type: b.type,
     label: b.label,
     time: timeRange(b.start, b.end),
-    badge: st ? STATUS_BADGE[st] : current ? '現在' : '',
+    badge: due ? '還沒開始' : st ? STATUS_BADGE[st] : current ? '現在' : '',
     current,
     past: task ? st === 'missed' : today && isDone(b, elapsed),
     canceled: isCanceled(dk, b),
@@ -157,17 +159,32 @@ function viewItems(dk: string, blocks: Block[], now: Date): ViewItem[] {
   return items.sort((a, b) => a.start - b.start);
 }
 
-/** 任務之間的空白，一律寫「休息」：自由時間、彈性時間 */
-const blankRow = (s: number, e: number): TemplateResult =>
-  html`<li class="slot slot-blank"><span class="slot-time">${timeRange(fmtTime(s), fmtTime(e))}</span><span class="slot-label">休息<span class="blank-dur">${fmtDur(e - s)}</span></span></li>`;
+/**
+ * 任務之間的空白，一律寫「休息」：自由時間、彈性時間。和其他列一樣跟著時間走：
+ * 過了的底色下沉，現在落在這段休息裡就框起來並標「現在」，看得出時間有在走。
+ * elapsed 是這一天已經過了幾分鐘，過去的日子整天都過了，還沒到的日子都還沒開始。
+ */
+function blankRow(s: number, e: number, elapsed: number): TemplateResult {
+  const past = e <= elapsed;
+  const current = s <= elapsed && elapsed < e;
+  return html`<li class="slot slot-blank ${past ? 'is-past' : ''} ${current ? 'is-current' : ''}" aria-current=${current ? 'time' : nothing}>
+    <span class="slot-time">${timeRange(fmtTime(s), fmtTime(e))}</span>
+    <span class="slot-label">休息<span class="blank-dur">${fmtDur(e - s)}</span>${past ? html`<span class="sr-only">（已過）</span>` : ''}</span>
+    ${current ? html`<span class="slot-badges"><span class="badge badge-now">現在・還剩 ${fmtDur(e - elapsed)}</span></span>` : ''}
+  </li>`;
+}
 
 /** 每一列後面接上到下一列之間的休息。重疊時以前面最晚的結束時間算，才不會在重疊的列之間多出一段空白 */
-function withBlanks<T extends { start: number; end: number }>(rows: T[], render: (r: T, i: number) => TemplateResult): TemplateResult[] {
+function withBlanks<T extends { start: number; end: number }>(
+  rows: T[],
+  elapsed: number,
+  render: (r: T, i: number) => TemplateResult,
+): TemplateResult[] {
   let end = 0;
   return rows.flatMap((r, i) => {
     end = Math.max(end, r.end);
     const next = i + 1 < rows.length ? rows[i + 1].start : SLEEP_MIN;
-    return next > end ? [render(r, i), blankRow(end, next)] : [render(r, i)];
+    return next > end ? [render(r, i), blankRow(end, next, elapsed)] : [render(r, i)];
   });
 }
 
@@ -177,12 +194,13 @@ function withBlanks<T extends { start: number; end: number }>(rows: T[], render:
  */
 export function timeline(dk: string, blocks: Block[], now: Date, draft: Draft | null): TemplateResult {
   let items: TemplateResult[];
+  const elapsed = elapsedMinutes(dk, now);
   if (draft) {
     const clash = new Set(draftConflicts(draft).flatMap(c => [c.a, c.b]));
     const rows = draft.blocks.map(b => ({ start: toMin(b.start), end: toMin(b.end) }));
-    items = withBlanks(rows, (_, i) => editRow(draft, i, now, clash.has(i)));
+    items = withBlanks(rows, elapsed, (_, i) => editRow(draft, i, now, clash.has(i)));
   } else {
-    items = withBlanks(viewItems(dk, blocks, now), viewRow);
+    items = withBlanks(viewItems(dk, blocks, now), elapsed, viewRow);
   }
   return html`<ol class="timeline" id="timeline" role="list">${items.length ? items : html`<li class="slot-empty">這一天沒有安排。</li>`}</ol>`;
 }

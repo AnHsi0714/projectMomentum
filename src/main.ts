@@ -7,10 +7,11 @@ import {
   confirmDraft, draftConflicts, dropPending, insertRow, isDirty, moveRow, parkRow, removeRow, resetRows, resizeRow, restorePending,
   setField, sortDraft, startDraft, toggleLock, type Draft, type Result,
 } from './lib/draft';
-import { endRunning, keepRunning, running, startFloat, startTask } from './lib/log';
+import { backfill, endRunning, keepRunning, running, startFloat, startTask, type BackfillItem } from './lib/log';
 import { blocksFor, floatsFor, setRecover } from './lib/schedule';
 import { data, exportJson, importJson, load, save, setStatusListener, type SaveStatus } from './lib/store';
 import { addDays, currentTime, dkey, elapsedMinutes, fmtMD, isDone, isToday, mondayOf, pad, parseKey, toMin } from './lib/time';
+import { backfillValue } from './components/backfill';
 import { currentRoute, isRouteHash, state, type ViewId } from './state';
 import { renderToday } from './views/today';
 import { renderReview } from './views/review';
@@ -213,6 +214,38 @@ function handleRun(act: string, ref: string | undefined, at: number | undefined)
   focusStill(main.querySelector<HTMLElement>('#now-card button') ?? $('#view-title'));
 }
 
+/**
+ * 補記：讀表單、檢查，通過就寫進實際紀錄並存檔，清空時間欄位。
+ * 有問題就把原因寫在訊息區，焦點放到該修的欄位；成功後焦點留在補記鈕，可以接著補下一筆。
+ */
+function handleBackfill() {
+  const field = <T extends HTMLElement>(id: string) => main.querySelector<T>(`#${id}`)!;
+  const sel = state.selDate;
+  const dk = dkey(sel);
+  const value = field<HTMLSelectElement>('bf-item').value;
+  const fail = (id: string, text: string) => {
+    setMessage('backfill-msg', text, true);
+    focusStill(field(id));
+  };
+  const task = blocksFor(dk, sel.getDay()).find(b => value === backfillValue('task', b.id));
+  const float = floatsFor(sel.getDay()).find(f => value === backfillValue('float', f.id));
+  const item: BackfillItem | undefined = task
+    ? { ref: task.id, label: task.label, type: task.type, float: false }
+    : float && { ref: float.id, label: float.label, type: float.type, float: true };
+  if (!item) return fail('bf-item', '請選擇要補記的項目。');
+  const start = parseTimeInput(field<HTMLInputElement>('bf-start').value);
+  if (!start) return fail('bf-start', '開始時間請用 24 小時制，例如 1930 或 19:30。');
+  const end = parseTimeInput(field<HTMLInputElement>('bf-end').value);
+  if (!end) return fail('bf-end', '結束時間請用 24 小時制，例如 2040 或 20:40。');
+  const error = backfill(dk, item, toMin(start), toMin(end), currentTime());
+  if (error) return fail(`bf-${error.field}`, error.message);
+  field<HTMLInputElement>('bf-start').value = '';
+  field<HTMLInputElement>('bf-end').value = '';
+  render();
+  setMessage('backfill-msg', `已補記「${item.label}」${start} 到 ${end}。`);
+  focusStill(main.querySelector<HTMLElement>('[data-backfill]') ?? $('#view-title'));
+}
+
 /** 把草稿操作的結果寫進訊息區 */
 const report = (r: Result) => (r.ok ? setMessage('adjust-msg', r.message) : setMessage('adjust-msg', r.error, true));
 
@@ -354,6 +387,8 @@ main.addEventListener('click', e => {
   } else if (t.closest('#btn-adjust')) {
     // 這一天沒有任務時，焦點放在插入任務的名稱欄（見 openDraft）
     openDraft();
+  } else if (t.closest('[data-backfill]')) {
+    handleBackfill();
   } else if (run) {
     handleRun(run.dataset.run!, run.dataset.ref, run.dataset.at === undefined ? undefined : Number(run.dataset.at));
   } else if (action) {
