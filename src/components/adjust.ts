@@ -28,7 +28,7 @@ export const adjustHint = () => html`<ul class="hint hint-list" id="move-note">
     <li>重疊的地方會列成<strong>衝突</strong>，全部解開才能確認。做過的事和現在之前的計畫或固定時段疊在一起不算衝突。</li>
     <li>任務之間沒排東西的地方是<strong>空白</strong>，寫成休息。</li>
     <li><strong>固定</strong>的時段（上課、通勤、臨時行程、睡前準備）不能拖動。</li>
-    <li>一天最晚到 ${SLEEP_TIME} 就寢。相鄰而且名稱、類型都相同的任務，儲存時會合併成一個。</li>
+    <li>一天最晚到 ${SLEEP_TIME} 就寢。同一件事接在一起或重疊不算衝突，時間條下面會列出來，儲存時合成一段。</li>
   </ul>
   <p class="form-msg" id="adjust-msg" role="status"></p>`;
 

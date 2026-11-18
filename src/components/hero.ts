@@ -2,16 +2,17 @@ import { html, nothing, type TemplateResult } from 'lit-html';
 import { KIND_OF } from '../config/kinds';
 import { SLEEP_TIME } from '../config/schedule';
 import { isLocked } from '../lib/blocks';
-import { cutTask, floatsLeft, logFor, nextTask, plannedEnd, remainingOf, running } from '../lib/log';
+import { cutTasks, floatsLeft, logFor, nextTask, plannedEnd, previousTask, remainingOf, running } from '../lib/log';
 import { isCanceled } from '../lib/schedule';
 import { fmtDur, fmtTime, toMin } from '../lib/time';
 import type { Block, Entry, Float } from '../types';
 import { timeRange } from './time-range';
 
 // 「現在」區塊：依實際紀錄顯示現在在做什麼。
-//   有任務或浮動事項在進行：名稱、已進行多久、進度尺、結束按鈕，任務多一個暫停；超過預定長度太多時問還在不在做。
+//   有任務或浮動事項在進行：名稱、已進行多久、進度尺、結束按鈕；超過預定長度太多時問還在不在做。
+//   任務多一個暫停，以及「回到」前一個任務：這個先暫停，切回去做前一個，之後再按繼續回來。
 //   固定時段（上課、通勤）照時鐘：名稱、還剩多久、進度尺，不用按。
-//   都沒有：休息，下面是下一個任務的開始按鈕，以及被打斷的任務的繼續按鈕。
+//   都沒有：休息，下面是下一個任務的開始按鈕、被打斷的任務的繼續按鈕，以及剛結束的任務的接著做按鈕。
 // 浮動事項（吃飯、洗澡、假日起床）的開始按鈕一直列在最下面，按下去會暫停正在做的任務。
 // 按鈕用 data-run 標示動作、data-ref 標示對象，由 main.ts 處理。
 
@@ -45,7 +46,7 @@ const nextLine = (nxt: Block | undefined) =>
   html`<p class="hero-next">${nxt ? html`接著 <b>${nxt.start}</b> ${nxt.label}` : html`接著 <b>${SLEEP_TIME}</b> 就寢`}</p>`;
 
 /** 正在進行的任務或浮動事項：名稱、開始時間、已進行、進度尺、結束按鈕 */
-function runningBody(m: number, r: Entry, planEnd: number, nxt: Block | undefined): TemplateResult {
+function runningBody(m: number, r: Entry, planEnd: number, nxt: Block | undefined, back: Block | undefined): TemplateResult {
   const s = toMin(r.start);
   const planned = planEnd - s;
   const over = m - planEnd;
@@ -60,6 +61,7 @@ function runningBody(m: number, r: Entry, planEnd: number, nxt: Block | undefine
     : html`<div class="hero-actions">
         <button type="button" class="btn btn-solid" data-run="end">結束<span class="sr-only">「${r.label}」</span></button>
         ${r.float ? nothing : html`<button type="button" class="btn" data-run="pause">暫停<span class="sr-only">「${r.label}」</span></button>`}
+        ${back ? html`<button type="button" class="btn" data-run="switch" data-ref=${back.id}>回到「${back.label}」</button>` : nothing}
       </div>`;
   return html`<p class="hero-eyebrow">${r.float ? '進行中・浮動' : '進行中'}</p>
     <h2 class="hero-title kind-${KIND_OF[r.type]}">${r.label}</h2>
@@ -89,18 +91,37 @@ function fixedBody(m: number, dk: string, cur: Block, nxt: Block | undefined): T
     </div>`;
 }
 
-/** 沒有在做任何事：休息。下面是下一個任務的開始按鈕，與被打斷的任務的繼續按鈕 */
-function restBody(m: number, dk: string, blocks: Block[], next: Block | undefined, cut: Block | undefined, started: boolean): TemplateResult {
+/**
+ * 剛按了結束的任務：今天最後一段任務紀錄（不算浮動事項）已經結束、不是被打斷的，而且還在時間表上。
+ * 按錯結束或想再做一下時，可以從現在接著做。
+ */
+function lastEnded(dk: string, blocks: Block[]): Block | undefined {
+  const last = logFor(dk).filter(e => !e.float).at(-1);
+  if (!last?.end || last.cut) return undefined;
+  return blocks.find(b => b.id === last.ref);
+}
+
+/**
+ * 沒有在做任何事：休息。下面是被打斷或暫停的任務的繼續按鈕（每一個都列，最近停的在前）、下一個任務的開始按鈕，
+ * 以及剛結束的任務的接著做按鈕（從現在記新的一段，中間的休息不算）。
+ */
+function restBody(
+  m: number, dk: string, blocks: Block[], next: Block | undefined, cut: Block[], again: Block | undefined, started: boolean,
+): TemplateResult {
   const first = blocks[0];
   const beforeDay = !started && first && m < toMin(first.start);
   const late = next ? m - toMin(next.start) : 0;
   const when = next ? (late > 0 ? `預定 ${next.start}，晚了 ${fmtDur(late)}` : late < 0 ? `預定 ${next.start}，還有 ${fmtDur(-late)}` : `預定 ${next.start}`) : '';
   const buttons = [
-    cut
-      ? html`<button type="button" class="btn btn-solid" data-run="start" data-ref=${cut.id}>繼續「${cut.label}」<span class="hero-btn-note">還剩 ${fmtDur(remainingOf(dk, cut))}</span></button>`
-      : nothing,
+    ...cut.map(
+      (c, k) =>
+        html`<button type="button" class="btn ${k === 0 ? 'btn-solid' : ''}" data-run="start" data-ref=${c.id}>繼續「${c.label}」<span class="hero-btn-note">還剩 ${fmtDur(remainingOf(dk, c))}</span></button>`,
+    ),
     next
-      ? html`<button type="button" class="btn ${cut ? '' : 'btn-solid'}" data-run="start" data-ref=${next.id}>開始「${next.label}」</button>`
+      ? html`<button type="button" class="btn ${cut.length ? '' : 'btn-solid'}" data-run="start" data-ref=${next.id}>開始「${next.label}」</button>`
+      : nothing,
+    again
+      ? html`<button type="button" class="btn ${cut.length || next ? '' : 'btn-solid'}" data-run="again" data-ref=${again.id}>接著做「${again.label}」</button>`
       : nothing,
   ];
   return html`<p class="hero-eyebrow">現在</p>
@@ -108,7 +129,7 @@ function restBody(m: number, dk: string, blocks: Block[], next: Block | undefine
     <div class="hero-foot">
       <p class="hero-next">${next ? html`下一個：<b>${next.label}</b>，${when}` : html`今天的任務都結束了，${SLEEP_TIME} 就寢。不延後睡眠來補進度。`}</p>
     </div>
-    ${next || cut ? html`<div class="hero-actions">${buttons}</div>` : nothing}`;
+    ${next || cut.length || again ? html`<div class="hero-actions">${buttons}</div>` : nothing}`;
 }
 
 /** 浮動事項的開始按鈕：吃飯、洗澡、假日起床。按下去會暫停正在做的任務 */
@@ -131,9 +152,9 @@ export function hero(now: Date, dk: string, blocks: Block[], floats: Float[], ad
   const fixed = blocks.find(b => isLocked(b) && toMin(b.start) <= m && m < toMin(b.end));
   const upcoming = blocks.find(b => toMin(b.start) > m && !isLocked(b)) ?? next;
   let body: TemplateResult;
-  if (r) body = runningBody(m, r, plannedEnd(dk, r, blocks, floats), next);
+  if (r) body = runningBody(m, r, plannedEnd(dk, r, blocks, floats), next, previousTask(dk, blocks));
   else if (fixed) body = fixedBody(m, dk, fixed, upcoming);
-  else body = restBody(m, dk, blocks, next, cutTask(dk, blocks, now), logFor(dk).length > 0);
+  else body = restBody(m, dk, blocks, next, cutTasks(dk, blocks, now), lastEnded(dk, blocks), logFor(dk).length > 0);
   const tools = adjusting || (r && r.float) ? nothing : floatTools(floatsLeft(dk, floats));
   return html`<section class="hero ${adjusting ? 'is-adjusting' : ''}" id="now-card">${body}${adjusting ? nothing : tools}
     <p class="form-msg" id="hero-msg" role="status"></p></section>`;

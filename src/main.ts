@@ -195,6 +195,13 @@ function handleRun(act: string, ref: string | undefined, at: number | undefined)
     if (!b) return;
     startTask(dk, b, now);
     message = `${r && r.ref !== b.id ? `「${r.label}」已結束。` : ''}開始「${b.label}」。`;
+  } else if (act === 'again') {
+    // 接著做剛結束的任務：從現在記新的一段。預定長度已經用完，不再問還在不在做
+    const b = blocks.find(x => x.id === ref);
+    if (!b) return;
+    startTask(dk, b, now);
+    keepRunning(dk);
+    message = `接著做「${b.label}」，從現在開始記，做完再按結束。`;
   } else if (act === 'float') {
     const f = floats.find(x => x.id === ref);
     if (!f) return;
@@ -210,6 +217,14 @@ function handleRun(act: string, ref: string | undefined, at: number | undefined)
     const b = blocks.find(x => x.id === r.ref);
     const left = b ? `，還剩 ${fmtDur(remainingOf(dk, b))}` : '';
     message = `「${r.label}」已暫停${left}。要接著做時按「繼續」。`;
+  } else if (act === 'switch') {
+    // 回到前一個任務：現在這個先暫停（之後可以繼續），前一個從現在接著做。前一個的預定長度用完了就不再問還在不在做
+    const b = blocks.find(x => x.id === ref);
+    if (!r || r.float || !b) return;
+    pauseRunning(dk, now);
+    startTask(dk, b, now);
+    if (remainingOf(dk, b) === 0) keepRunning(dk);
+    message = `「${r.label}」先暫停，回到「${b.label}」。做完按結束，再按繼續回到「${r.label}」。`;
   } else if (act === 'keep') {
     keepRunning(dk);
     message = `好，「${r?.label ?? ''}」繼續進行，不再提醒。`;
@@ -325,7 +340,7 @@ function handleAction(act: string, index?: number, k?: number) {
     }
     state.draft = null;
     render();
-    const merged = r.merged ? `相鄰而且內容相同的任務已合併，少了 ${r.merged} 列。` : '';
+    const merged = r.merged ? `同一件事接在一起或重疊的已合成一段，少了 ${r.merged} 列。` : '';
     setMessage('adjust-msg', `已更新這一天的時間表。${merged}`);
     focusStill($('#btn-adjust'));
   }

@@ -1,7 +1,7 @@
 import { html, nothing, type TemplateResult } from 'lit-html';
 import { KIND_OF } from '../config/kinds';
 import { blanks, isLocked, lanes, SLEEP_MIN, STEP_MIN, type Conflict } from '../lib/blocks';
-import { draftConflicts, stripStart, type Draft } from '../lib/draft';
+import { draftConflicts, draftMerges, stripStart, type Draft } from '../lib/draft';
 import { fmtDur, fmtTime, pad, toMin } from '../lib/time';
 import type { Block } from '../types';
 
@@ -54,6 +54,23 @@ function conflictList(d: Draft): TemplateResult {
           </ul>`
       : html`<p class="hint">沒有衝突，可以確認。</p>`}
     <p class="sr-only" id="conflict-live" role="status"></p>
+  </div>`;
+}
+
+/**
+ * 確認時會合併的清單：同一件事接在一起或重疊，例如被打斷的任務兩段拖到接在一起。
+ * 沒有就不顯示。只是提醒，不擋確認，所以不播報也不放按鈕。
+ */
+function mergeList(d: Draft): TemplateResult | typeof nothing {
+  const pairs = draftMerges(d);
+  if (!pairs.length) return nothing;
+  const when = (b: Block) => `${b.start}–${b.end}`;
+  return html`<div class="merges" role="group" aria-labelledby="merge-title">
+    <h3 class="conflicts-title" id="merge-title">會合併<span class="conflicts-count">${pairs.length} 處</span></h3>
+    <p class="hint">同一件事接在一起或重疊，不算衝突，確認時合成一段。</p>
+    <ul class="merge-list" role="list">
+      ${pairs.map(([a, b]) => html`<li>「${nameOf(d.blocks[a].label)}」${when(d.blocks[a])} 和 ${when(d.blocks[b])}</li>`)}
+    </ul>
   </div>`;
 }
 
@@ -111,6 +128,7 @@ export function dayStrip(d: Draft): TemplateResult | typeof nothing {
       </div>
     </div>
     ${conflictList(d)}
+    ${mergeList(d)}
   </div>`;
 }
 

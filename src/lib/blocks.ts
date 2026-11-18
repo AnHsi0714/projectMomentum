@@ -132,20 +132,38 @@ export const parsePending = (raw: unknown): Block[] =>
 /** 依開始時間排序，回傳新陣列。開始時間相同時維持原本的先後 */
 export const sortBlocks = <T extends Block>(blocks: T[]): T[] => [...blocks].sort((a, b) => toMin(a.start) - toMin(b.start));
 
+/** 兩個時段相鄰或重疊（接在一起也算） */
+export const touches = (a: Block, b: Block): boolean => toMin(a.start) <= toMin(b.end) && toMin(b.start) <= toMin(a.end);
+
+/** 名稱、類型與鎖定都相同的兩個任務，接在一起或重疊時會合併 */
+export const sameTask = (a: Block, b: Block): boolean =>
+  a.label.trim() === b.label.trim() && a.type === b.type && isLocked(a) === isLocked(b);
+
 /**
- * 把相鄰、名稱、類型與鎖定都相同、而且前一個結束時下一個剛好開始的任務合併成一個，
- * 結束時間延到後一個的結束，id 用前一個的。回傳新的時間表與少了幾列，不會改動傳進來的陣列。
+ * 把 same 認定是同一件事、而且相鄰或重疊的時段合併成一個：開始是較早的，結束是較晚的，id 用較早的。
+ * combine 在合併時呼叫，可以把後一段的其他資訊帶過去。
+ * 回傳依開始時間排好的新清單與少了幾列，不會改動傳進來的陣列與時段。
  */
-export function mergeSame(blocks: Block[]): { blocks: Block[]; merged: number } {
-  const out: Block[] = [];
-  for (const b of blocks) {
-    const last = out[out.length - 1];
-    if (last && last.label.trim() === b.label.trim() && last.type === b.type && isLocked(last) === isLocked(b) && last.end === b.start) {
-      last.end = b.end;
-    } else out.push(copyBlock(b));
+export function mergeTouching<T extends Block>(
+  blocks: T[],
+  same: (a: T, b: T) => boolean,
+  combine?: (into: T, from: T) => void,
+): { blocks: T[]; merged: number } {
+  const out: T[] = [];
+  for (const b of sortBlocks(blocks)) {
+    const into = out.find(o => same(o, b) && touches(o, b));
+    if (!into) {
+      out.push(copyBlock(b));
+      continue;
+    }
+    if (toMin(b.end) > toMin(into.end)) into.end = b.end;
+    combine?.(into, b);
   }
   return { blocks: out, merged: blocks.length - out.length };
 }
+
+/** 名稱、類型與鎖定都相同、而且相鄰或重疊的任務合併成一個（見 mergeTouching） */
+export const mergeSame = (blocks: Block[]): { blocks: Block[]; merged: number } => mergeTouching(blocks, sameTask);
 
 // 衝突
 

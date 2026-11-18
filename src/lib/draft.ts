@@ -1,7 +1,7 @@
 import type { Block, Entry, Float } from '../types';
 import {
-  baseBlocks, blanks, conflicts, copyBlock, dayProblems, durOf, isBlockType, isLocked, LIFE_TYPES, mergeSame, moveBlock, newId,
-  resizeBlock, SLEEP_MIN, sortBlocks, STEP_MIN, withLock, type Conflict, type Problem,
+  baseBlocks, blanks, conflicts, copyBlock, dayProblems, durOf, isBlockType, isLocked, LIFE_TYPES, mergeTouching, moveBlock, newId,
+  resizeBlock, sameTask, SLEEP_MIN, sortBlocks, STEP_MIN, touches, withLock, type Conflict, type Problem,
 } from './blocks';
 import { logFor, plannedEnd, replaceLog } from './log';
 import { applyDay, blocksFor, floatsFor, pendingFor, plannedWake } from './schedule';
@@ -95,13 +95,33 @@ export const isDirty = (d: Draft): boolean =>
   JSON.stringify([d.blocks, d.pending]) !== JSON.stringify([d.original, d.originalPending]);
 
 /**
- * 草稿目前的衝突。做過的彼此重疊一定是衝突，同一段時間不能做兩件事。
+ * 兩列是不是同一件事，接在一起或重疊時確認會合併成一段：
+ * 做過的看是不是同一個任務或浮動事項的紀錄；計畫看名稱、類型與鎖定是否都相同。做過的和計畫不合併。
+ */
+export const sameItem = (a: DraftRow, b: DraftRow): boolean =>
+  a.rec && b.rec ? a.rec.ref === b.rec.ref : !a.rec && !b.rec && sameTask(a, b);
+
+/** 確認時會合併的兩列（在草稿裡的位置，a < b），拖動時就列出來，不用等確認後才知道 */
+export function draftMerges(d: Draft): [number, number][] {
+  const out: [number, number][] = [];
+  d.blocks.forEach((a, i) =>
+    d.blocks.forEach((b, j) => {
+      if (i < j && sameItem(a, b) && touches(a, b)) out.push([i, j]);
+    }),
+  );
+  return out;
+}
+
+/**
+ * 草稿目前的衝突。同一件事重疊不算衝突，確認時直接合併（見 sameItem）。
+ * 做過的彼此重疊一定是衝突，同一段時間不能做兩件事。
  * 其他的重疊（牽涉到計畫或固定時段）只看現在之後的部分：現在之前的計畫只是參考，
  * 例如沒做的任務或通勤和做過的事疊在一起，不用為了它去改。過去的日子因此只檢查做過的。
  */
 export function draftConflicts(d: Draft): Conflict[] {
   const elapsed = elapsedMinutes(d.date, currentTime());
   return conflicts(d.blocks)
+    .filter(c => !sameItem(d.blocks[c.a], d.blocks[c.b]))
     .flatMap(c => {
       if (d.blocks[c.a].rec && d.blocks[c.b].rec) return [c];
       const start = Math.max(c.start, elapsed);
@@ -331,9 +351,9 @@ function recordedPlan(ref: string, segs: DraftRow[], old: Block | undefined, run
 
 /**
  * 儲存調整。欄位有問題或還有衝突就不存，回傳問題或衝突。
- * 沒問題就存兩份：
+ * 沒問題就先把同一件事接在一起或重疊的合併（見 sameItem），再存兩份：
  *   實際紀錄：做過的每一列一段。今天結束在現在之後的是進行中，不寫結束。
- *   計畫：沒做的各列（相鄰而且內容相同的合併），加上做過的任務的計畫（見 recordedPlan）。
+ *   計畫：沒做的各列，加上做過的任務的計畫（見 recordedPlan）。
  * 回傳合併掉幾列。
  */
 export function confirmDraft(d: Draft, now: Date): ConfirmResult {
@@ -349,7 +369,10 @@ export function confirmDraft(d: Draft, now: Date): ConfirmResult {
   const found = draftConflicts(d);
   if (found.length > 0) return { conflicts: found };
 
-  const rows = sortBlocks(d.blocks);
+  // 同一件事接在一起或重疊的先合併：做過的合成一段紀錄，中斷、超時的標記照後面那一段
+  const recMerge = mergeTouching(d.blocks.filter(b => b.rec), sameItem, (into, from) => (into.rec = from.rec));
+  const planMerge = mergeTouching(d.blocks.filter(b => !b.rec), sameItem);
+  const rows = sortBlocks([...recMerge.blocks, ...planMerge.blocks]);
   const done = rows.filter(b => b.rec);
   const entries = done.map((b): Entry => {
     const r = b.rec!;
@@ -369,9 +392,8 @@ export function confirmDraft(d: Draft, now: Date): ConfirmResult {
     return recordedPlan(ref, segs, oldPlan.find(b => b.id === ref), segs.some(b => isRunningRow(d.date, b, now)));
   });
   const plan = rows.filter(b => !b.rec).map(({ rec: _, ...b }) => b);
-  const { blocks, merged } = mergeSame(plan);
 
   replaceLog(d.date, entries);
-  applyDay(d.date, [...blocks, ...recPlans], d.pending);
-  return { merged };
+  applyDay(d.date, [...plan, ...recPlans], d.pending);
+  return { merged: recMerge.merged + planMerge.merged };
 }

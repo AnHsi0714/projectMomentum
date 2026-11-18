@@ -1001,6 +1001,27 @@
   color: var(--danger);
 }
 
+// 會合併的清單：只是提醒，不擋確認，所以用虛線框與一般文字色，和衝突的錯誤色分開
+.merges {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed var(--line-strong);
+
+  .conflicts-count {
+    color: var(--text-muted);
+  }
+
+  .hint {
+    margin-bottom: 0.25rem;
+  }
+}
+
+.merge-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .conflict-list {
   display: grid;
   gap: 0.25rem;

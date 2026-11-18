@@ -51,11 +51,23 @@ export const remainingOf = (dk: string, b: Block): number => Math.max(0, durOf(b
 export const nextTask = (dk: string, blocks: Block[], now: Date): Block | undefined =>
   blocks.find(b => !isLocked(b) && statusOf(dk, b, now) === 'todo' && !isCanceled(dk, b));
 
-/** 被浮動事項打斷、還沒做完的任務，取最近被打斷的那一個 */
-export function cutTask(dk: string, blocks: Block[], now: Date): Block | undefined {
+/** 被打斷或暫停、還沒做完的任務，最近停下來的排前面。休息時每一個都有「繼續」 */
+export function cutTasks(dk: string, blocks: Block[], now: Date): Block[] {
   const cut = blocks.filter(b => statusOf(dk, b, now) === 'cut');
   const endOf = (b: Block) => toMin(entriesOf(dk, b.id).at(-1)?.end ?? '00:00');
-  return cut.sort((a, b) => endOf(b) - endOf(a))[0];
+  return cut.sort((a, b) => endOf(b) - endOf(a));
+}
+
+/**
+ * 正在做的任務之前的那個任務（不算浮動事項），做到一半想切回去時用。
+ * 沒有、是同一個任務、或已經不在時間表上，回傳 undefined。
+ */
+export function previousTask(dk: string, blocks: Block[]): Block | undefined {
+  const log = logFor(dk);
+  const r = running(dk);
+  if (!r || r.float) return undefined;
+  const prev = log.slice(0, log.indexOf(r)).filter(e => !e.float).at(-1);
+  return prev && prev.ref !== r.ref ? blocks.find(b => b.id === prev.ref) : undefined;
 }
 
 /**
@@ -185,13 +197,22 @@ export function keepRunning(dk: string): void {
  * 不存檔，由呼叫的人一起存。
  */
 export function replaceLog(dk: string, entries: Entry[]): void {
-  const habitsOf = (es: Entry[]) => es.flatMap(e => (e.float ? [] : [habitOf(e)])).filter((h): h is string => h !== null);
-  const touched = new Set([...habitsOf(logFor(dk)), ...habitsOf(entries)]);
+  const before = logFor(dk);
   if (entries.length) data.log[dk] = entries;
   else delete data.log[dk];
+  recheckHabits(dk, [...before, ...entries]);
+}
+
+/**
+ * 重新算 touched 這些紀錄牽涉到的習慣：當天有任務做完（按了結束、不是被打斷）就勾，沒有就拿掉。
+ * 紀錄被換掉、刪掉或重新打開時呼叫，其他習慣不動。
+ */
+function recheckHabits(dk: string, touched: Entry[]): void {
+  const habits = new Set(touched.flatMap(e => (e.float ? [] : [habitOf(e)])).filter((h): h is string => h !== null));
+  const log = logFor(dk);
   const checks = { ...data.checks[dk] };
-  for (const h of touched) {
-    if (entries.some(e => !e.float && e.end && !e.cut && habitOf(e) === h)) checks[h] = true;
+  for (const h of habits) {
+    if (log.some(e => !e.float && e.end && !e.cut && habitOf(e) === h)) checks[h] = true;
     else delete checks[h];
   }
   if (Object.keys(checks).length) data.checks[dk] = checks;
