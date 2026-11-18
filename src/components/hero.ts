@@ -1,7 +1,7 @@
 import { html, nothing, type TemplateResult } from 'lit-html';
 import { KIND_OF } from '../config/kinds';
 import { SLEEP_TIME } from '../config/schedule';
-import { isLocked } from '../lib/blocks';
+import { isLocked, SLEEP_MIN } from '../lib/blocks';
 import { cutTasks, floatsLeft, logFor, nextTask, plannedEnd, previousTask, remainingOf, running } from '../lib/log';
 import { isCanceled } from '../lib/schedule';
 import { fmtDur, fmtTime, toMin } from '../lib/time';
@@ -103,7 +103,7 @@ function lastEnded(dk: string, blocks: Block[]): Block | undefined {
 
 /**
  * 沒有在做任何事：休息。下面是被打斷或暫停的任務的繼續按鈕（每一個都列，最近停的在前）、下一個任務的開始按鈕，
- * 以及剛結束的任務的接著做按鈕（從現在記新的一段，中間的休息不算）。
+ * 以及剛結束的任務的接著做按鈕（從現在記新的一段，中間的休息不算）。過了就寢時間這些都不列。
  */
 function restBody(
   m: number, dk: string, blocks: Block[], next: Block | undefined, cut: Block[], again: Block | undefined, started: boolean,
@@ -124,6 +124,14 @@ function restBody(
       ? html`<button type="button" class="btn ${cut.length || next ? '' : 'btn-solid'}" data-run="again" data-ref=${again.id}>接著做「${again.label}」</button>`
       : nothing,
   ];
+  // 過了就寢時間：不再列任何開始、繼續的按鈕，就寢後開始的紀錄也會被自動結束
+  if (m >= SLEEP_MIN) {
+    return html`<p class="hero-eyebrow">現在</p>
+      <h2 class="hero-title">就寢</h2>
+      <div class="hero-foot">
+        <p class="hero-next">已經過了就寢時間 ${SLEEP_TIME}，今天到這裡。沒做完的不延後睡眠來補。</p>
+      </div>`;
+  }
   return html`<p class="hero-eyebrow">現在</p>
     <h2 class="hero-title">${beforeDay ? '起床前' : '休息'}</h2>
     <div class="hero-foot">
@@ -155,7 +163,8 @@ export function hero(now: Date, dk: string, blocks: Block[], floats: Float[], ad
   if (r) body = runningBody(m, r, plannedEnd(dk, r, blocks, floats), next, previousTask(dk, blocks));
   else if (fixed) body = fixedBody(m, dk, fixed, upcoming);
   else body = restBody(m, dk, blocks, next, cutTasks(dk, blocks, now), lastEnded(dk, blocks), logFor(dk).length > 0);
-  const tools = adjusting || (r && r.float) ? nothing : floatTools(floatsLeft(dk, floats));
+  // 過了就寢時間也不列浮動事項
+  const tools = adjusting || (r && r.float) || m >= SLEEP_MIN ? nothing : floatTools(floatsLeft(dk, floats));
   return html`<section class="hero ${adjusting ? 'is-adjusting' : ''}" id="now-card">${body}${adjusting ? nothing : tools}
     <p class="form-msg" id="hero-msg" role="status"></p></section>`;
 }

@@ -2,7 +2,7 @@ import './styles/main.scss';
 import { render as paint, type TemplateResult } from 'lit-html';
 import { DAY_NAMES } from './config/schedule';
 import { initStripDrag, isStripDragging } from './strip-drag';
-import { isBlockType, parseTimeInput, STEP_MIN } from './lib/blocks';
+import { isBlockType, parseTimeInput, SLEEP_MIN, STEP_MIN } from './lib/blocks';
 import {
   confirmDraft, draftConflicts, dropPending, insertRow, isDirty, moveRow, parkRow, removeRow, resetRows, resizeRow, restorePending,
   setField, sortDraft, startDraft, toggleDone, toggleLock, type Draft, type Result,
@@ -189,6 +189,8 @@ function handleRun(act: string, ref: string | undefined, at: number | undefined)
   const blocks = blocksFor(dk, sel.getDay());
   const floats = floatsFor(sel.getDay());
   const r = running(dk);
+  // 過了就寢時間不能再開始任何事（畫面上的按鈕也已經拿掉），以防停在舊畫面上按到
+  if (['start', 'again', 'float', 'switch'].includes(act) && elapsedMinutes(dk, now) >= SLEEP_MIN) return;
   let message = '';
   if (act === 'start') {
     const b = blocks.find(x => x.id === ref);
