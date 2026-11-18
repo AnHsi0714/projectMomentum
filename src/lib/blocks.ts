@@ -47,10 +47,10 @@ const defaultLocked = (type: BlockType) => LOCKED_TYPES.has(type);
 
 export const isLocked = (b: Pick<Block, 'type' | 'locked'>): boolean => b.locked ?? defaultLocked(b.type);
 
-/** 設定鎖定，回傳新的任務。和類型的預設相同時不寫 locked，紀錄才能和原定時間表直接比對 */
-export function withLock(b: Block, locked: boolean): Block {
+/** 設定鎖定，回傳新的任務（其他欄位照抄）。和類型的預設相同時不寫 locked，紀錄才能和原定時間表直接比對 */
+export function withLock<T extends Block>(b: T, locked: boolean): T {
   const { locked: _, ...base } = b;
-  return locked === defaultLocked(b.type) ? base : { ...base, locked };
+  return (locked === defaultLocked(b.type) ? base : { ...base, locked }) as T;
 }
 
 /** 原定時間表的一列轉成時段，id 是它在那一天的位置 */
@@ -69,7 +69,7 @@ export const floatsFor = (day: number): Float[] => FLOATS[day].map(f => ({ ...f 
 /** 浮動事項是不是起床：起床的時間會顯示在「本週」頁，也用來判斷起床是否達標 */
 export const isWake = (f: Pick<Float, 'id'>): boolean => f.id === 'wake';
 
-export const copyBlock = (b: Block): Block => ({ ...b });
+export const copyBlock = <T extends Block>(b: T): T => ({ ...b });
 export const durOf = (b: Pick<Block, 'start' | 'end'>): number => toMin(b.end) - toMin(b.start);
 
 // 讀取
@@ -106,21 +106,21 @@ const isLegacyBlank = (row: unknown): boolean =>
 const isLife = (b: Block): boolean => LIFE_TYPES.has(b.type) && !isLocked(b);
 
 /**
- * 檢查從備份或檔案讀進來的一天時間表。格式不對、時間倒退或重疊就回傳 null，
+ * 檢查從備份或檔案讀進來的一天時間表。有一列格式不對就回傳 null，
  * 呼叫的人會當作這一天沒有調整，改用原定時間表。舊紀錄裡的生活時段讀進來時拿掉。
+ * 計畫可以重疊：做過的任務保留原本的計畫時間當參考，可能和後來排的任務疊在一起；
+ * 真正不能重疊的是實際紀錄與現在之後的安排，調整時由 draft.ts 的 draftConflicts 檢查。
  */
 export function parseBlocks(raw: unknown): Block[] | null {
   if (!Array.isArray(raw)) return null;
   const out: Block[] = [];
-  let prevEnd = 0;
   for (const [i, row] of raw.entries()) {
     if (isLegacyBlank(row)) continue;
     const b = parseBlock(row, `m${i}`);
-    if (!b || toMin(b.start) < prevEnd) return null;
-    prevEnd = toMin(b.end);
+    if (!b) return null;
     if (!isLife(b)) out.push(b);
   }
-  return out;
+  return sortBlocks(out);
 }
 
 /** 讀取暫待區：任務之間不必依序，也可以重疊，格式不對的任務與生活時段直接丟掉 */
@@ -130,7 +130,7 @@ export const parsePending = (raw: unknown): Block[] =>
     : [];
 
 /** 依開始時間排序，回傳新陣列。開始時間相同時維持原本的先後 */
-export const sortBlocks = (blocks: Block[]): Block[] => [...blocks].sort((a, b) => toMin(a.start) - toMin(b.start));
+export const sortBlocks = <T extends Block>(blocks: T[]): T[] => [...blocks].sort((a, b) => toMin(a.start) - toMin(b.start));
 
 /**
  * 把相鄰、名稱、類型與鎖定都相同、而且前一個結束時下一個剛好開始的任務合併成一個，

@@ -5,13 +5,12 @@ import { initStripDrag, isStripDragging } from './strip-drag';
 import { isBlockType, parseTimeInput, STEP_MIN } from './lib/blocks';
 import {
   confirmDraft, draftConflicts, dropPending, insertRow, isDirty, moveRow, parkRow, removeRow, resetRows, resizeRow, restorePending,
-  setField, sortDraft, startDraft, toggleLock, type Draft, type Result,
+  setField, sortDraft, startDraft, toggleDone, toggleLock, type Draft, type Result,
 } from './lib/draft';
-import { backfill, endRunning, keepRunning, running, startFloat, startTask, type BackfillItem } from './lib/log';
+import { endRunning, keepRunning, pauseRunning, remainingOf, running, startFloat, startTask } from './lib/log';
 import { blocksFor, floatsFor, setRecover } from './lib/schedule';
 import { data, exportJson, importJson, load, save, setStatusListener, type SaveStatus } from './lib/store';
-import { addDays, currentTime, dkey, elapsedMinutes, fmtMD, isDone, isToday, mondayOf, pad, parseKey, toMin } from './lib/time';
-import { backfillValue } from './components/backfill';
+import { addDays, currentTime, dkey, elapsedMinutes, fmtDur, fmtMD, isDone, isToday, mondayOf, pad, parseKey, toMin } from './lib/time';
 import { currentRoute, isRouteHash, state, type ViewId } from './state';
 import { renderToday } from './views/today';
 import { renderReview } from './views/review';
@@ -205,6 +204,12 @@ function handleRun(act: string, ref: string | undefined, at: number | undefined)
     if (!r) return;
     endRunning(dk, now, act === 'planned' ? at : undefined);
     message = `「${r.label}」已結束，接下來是休息，要開始下一個時再按開始。`;
+  } else if (act === 'pause') {
+    if (!r || r.float) return;
+    pauseRunning(dk, now);
+    const b = blocks.find(x => x.id === r.ref);
+    const left = b ? `，還剩 ${fmtDur(remainingOf(dk, b))}` : '';
+    message = `「${r.label}」已暫停${left}。要接著做時按「繼續」。`;
   } else if (act === 'keep') {
     keepRunning(dk);
     message = `好，「${r?.label ?? ''}」繼續進行，不再提醒。`;
@@ -214,44 +219,18 @@ function handleRun(act: string, ref: string | undefined, at: number | undefined)
   focusStill(main.querySelector<HTMLElement>('#now-card button') ?? $('#view-title'));
 }
 
-/**
- * 補記：讀表單、檢查，通過就寫進實際紀錄並存檔，清空時間欄位。
- * 有問題就把原因寫在訊息區，焦點放到該修的欄位；成功後焦點留在補記鈕，可以接著補下一筆。
- */
-function handleBackfill() {
-  const field = <T extends HTMLElement>(id: string) => main.querySelector<T>(`#${id}`)!;
-  const sel = state.selDate;
-  const dk = dkey(sel);
-  const value = field<HTMLSelectElement>('bf-item').value;
-  const fail = (id: string, text: string) => {
-    setMessage('backfill-msg', text, true);
-    focusStill(field(id));
-  };
-  const task = blocksFor(dk, sel.getDay()).find(b => value === backfillValue('task', b.id));
-  const float = floatsFor(sel.getDay()).find(f => value === backfillValue('float', f.id));
-  const item: BackfillItem | undefined = task
-    ? { ref: task.id, label: task.label, type: task.type, float: false }
-    : float && { ref: float.id, label: float.label, type: float.type, float: true };
-  if (!item) return fail('bf-item', '請選擇要補記的項目。');
-  const start = parseTimeInput(field<HTMLInputElement>('bf-start').value);
-  if (!start) return fail('bf-start', '開始時間請用 24 小時制，例如 1930 或 19:30。');
-  const end = parseTimeInput(field<HTMLInputElement>('bf-end').value);
-  if (!end) return fail('bf-end', '結束時間請用 24 小時制，例如 2040 或 20:40。');
-  const error = backfill(dk, item, toMin(start), toMin(end), currentTime());
-  if (error) return fail(`bf-${error.field}`, error.message);
-  field<HTMLInputElement>('bf-start').value = '';
-  field<HTMLInputElement>('bf-end').value = '';
-  render();
-  setMessage('backfill-msg', `已補記「${item.label}」${start} 到 ${end}。`);
-  focusStill(main.querySelector<HTMLElement>('[data-backfill]') ?? $('#view-title'));
-}
-
 /** 把草稿操作的結果寫進訊息區 */
 const report = (r: Result) => (r.ok ? setMessage('adjust-msg', r.message) : setMessage('adjust-msg', r.error, true));
 
-/** 插入任務：讀表單、檢查，通過就插進草稿，焦點移到新任務的名稱。有問題就把焦點放到該修的欄位 */
+/**
+ * 插入：讀表單、檢查，通過就插進草稿，焦點移到新任務的名稱。有問題就把焦點放到該修的欄位。
+ * 「項目」選了浮動事項時，名稱、類型與固定都照那個浮動事項，不看那幾個欄位。
+ */
 function insert(d: Draft) {
   const field = (id: string) => main.querySelector<HTMLInputElement>(`#${id}`)!;
+  const now = currentTime();
+  const itemId = field('new-item').value;
+  const float = itemId ? floatsFor(parseKey(d.date).getDay()).find(f => f.id === itemId) : undefined;
   const label = field('new-label').value.trim();
   const start = parseTimeInput(field('new-start').value);
   const minutes = Number(field('new-len').value);
@@ -260,11 +239,11 @@ function insert(d: Draft) {
     setMessage('adjust-msg', text, true);
     focusStill(field(id));
   };
-  if (!label) return fail('new-label', '請輸入要插入的任務名稱。');
+  if (!float && !label) return fail('new-label', '請輸入要插入的任務名稱。');
   if (!start) return fail('new-start', '開始時間請用 24 小時制，例如 1400 或 14:00。');
   if (!Number.isInteger(minutes) || minutes < STEP_MIN) return fail('new-len', `長度至少 ${STEP_MIN} 分鐘，請填整數。`);
   if (!isBlockType(type)) return fail('new-type', '請選擇類型。');
-  const r = insertRow(d, { label, type, start, minutes, locked: field('new-lock').checked });
+  const r = insertRow(d, { label, type, start, minutes, locked: field('new-lock').checked, float }, now);
   if (!r.ok) return fail('new-start', r.error);
   field('new-label').value = '';
   render();
@@ -298,6 +277,12 @@ function handleAction(act: string, index?: number, k?: number) {
     announceConflicts();
     // 刪掉之後同一個位置換成下一個任務；刪的是最後一個就放在插入鈕
     focusButton('delete', index) || focusButton('insert');
+  } else if (act === 'done' && index !== undefined) {
+    const r = toggleDone(d, index, now);
+    render();
+    report(r);
+    announceConflicts();
+    focusButton('done', index);
   } else if (act === 'lock' && index !== undefined) {
     const r = toggleLock(d, index);
     render();
@@ -312,9 +297,9 @@ function handleAction(act: string, index?: number, k?: number) {
     if (r.ok && act === 'restore' && r.index !== undefined) focusField(r.index, 'label');
     else focusPending(act, k) || focusPending('restore', 0) || focusButton('insert');
   } else if (act === 'reset') {
-    resetRows(d, sel.getDay());
+    resetRows(d, sel.getDay(), now);
     render();
-    setMessage('adjust-msg', '已還原成原定時間表，暫待區也清空了。按確認後才會儲存。');
+    setMessage('adjust-msg', '計畫已還原成原定時間表，暫待區也清空了；做過的回到開始調整前的樣子。按確認後才會儲存。');
     announceConflicts();
     focusButton('insert');
   } else if (act === 'cancel') {
@@ -324,10 +309,6 @@ function handleAction(act: string, index?: number, k?: number) {
     $('#btn-adjust').focus({ preventScroll: true });
   } else if (act === 'confirm') {
     const r = confirmDraft(d, now);
-    if (r === 'expired') {
-      setMessage('adjust-error', '這一天已經結束，調整沒有儲存。請按取消離開。', true);
-      return;
-    }
     if ('problems' in r) {
       render();
       const rows = new Set(r.problems.map(p => p.index)).size;
@@ -387,8 +368,6 @@ main.addEventListener('click', e => {
   } else if (t.closest('#btn-adjust')) {
     // 這一天沒有任務時，焦點放在插入任務的名稱欄（見 openDraft）
     openDraft();
-  } else if (t.closest('[data-backfill]')) {
-    handleBackfill();
   } else if (run) {
     handleRun(run.dataset.run!, run.dataset.ref, run.dataset.at === undefined ? undefined : Number(run.dataset.at));
   } else if (action) {

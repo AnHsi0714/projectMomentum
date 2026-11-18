@@ -659,12 +659,15 @@
   grid-area: del;
   justify-self: end;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.25rem;
 }
 
 .edit-del,
 .edit-park,
-.edit-lock {
+.edit-lock,
+.edit-done {
   padding-inline: 0.75rem;
 }
 
@@ -965,22 +968,6 @@
   }
 }
 
-// 時間表下面的補記：平常收合，展開後是和插入任務相同的表單
-.backfill {
-  margin-top: 1rem;
-
-  summary {
-    width: fit-content;
-    padding-block: 0.25rem;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
-  .insert-form {
-    margin-top: 0.5rem;
-  }
-}
-
 .blank-dur {
   margin-left: 0.5rem;
   font-weight: 400;
@@ -1039,9 +1026,8 @@
   outline-offset: -2px;
 }
 
-// 時間表右邊的計畫時間或「浮動」，以及調整時的實際時間：次要文字色。「計畫」「實際」與時間一律在同一行
-.slot-plan,
-.edit-actual {
+// 時間表右邊的計畫時間或「浮動」：次要文字色。「計畫」與時間一律在同一行
+.slot-plan {
   color: var(--text-muted);
   font-size: 0.875rem;
   font-variant-numeric: tabular-nums;

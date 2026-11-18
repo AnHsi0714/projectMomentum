@@ -1,6 +1,6 @@
 import { habitOf } from '../config/habits';
 import type { Block, Entry, Float } from '../types';
-import { durOf, isLocked, isWake, SLEEP_MIN, STEP_MIN } from './blocks';
+import { durOf, isLocked, isWake, SLEEP_MIN } from './blocks';
 import { floatsFor, isCanceled, plannedWake } from './schedule';
 import { data, save } from './store';
 import { elapsedMinutes, fmtTime, parseKey, toMin } from './time';
@@ -9,8 +9,9 @@ import { elapsedMinutes, fmtTime, parseKey, toMin } from './time';
 //   沒按結束就開始下一個：前一個記到現在，等於前一個延長了。
 //   按了結束：之後到下一個開始之前都是休息。
 //   浮動事項（吃飯、洗澡）按開始時，正在做的任務先中斷，之後可以按「繼續」接著做；不按就是休息。
+//   任務也可以自己按「暫停」，和被浮動事項打斷一樣記成中斷。
 //   固定時段（上課、通勤、睡前準備）照時鐘走，不用按；它開始時，正在進行的紀錄自動結束。
-//   忘了按的可以事後補記（backfill），只能補已經結束、和其他紀錄不重疊的一段。
+//   忘了按、按錯或時間不對，在調整時間表裡直接改實際紀錄，確認時整天換掉（replaceLog）。
 // 習慣是否達標只看實際紀錄：同一個習慣有任務按了結束就算達標；起床依起床時間自動判斷。
 
 /** 一個任務今天的狀態。missed 是預定時間已經過了還沒開始（用 id 查時，看的是就寢時間） */
@@ -159,6 +160,17 @@ export function endRunning(dk: string, now: Date, at?: number): void {
   save();
 }
 
+/**
+ * 暫停正在做的任務：和被浮動事項打斷一樣記成中斷，之後「現在」區塊會出現「繼續」，還剩的長度照算。
+ * 浮動事項沒有「繼續」，不能暫停，只能結束。
+ */
+export function pauseRunning(dk: string, now: Date): void {
+  const r = running(dk);
+  if (!r || r.float) return;
+  close(dk, elapsedMinutes(dk, now), true);
+  save();
+}
+
 /** 超過預定長度時回答「還在做」，這一段不再提醒 */
 export function keepRunning(dk: string): void {
   const r = running(dk);
@@ -167,38 +179,23 @@ export function keepRunning(dk: string): void {
   save();
 }
 
-/** 補記的對象：時間表上的任務，或是浮動事項 */
-export interface BackfillItem {
-  ref: string;
-  label: string;
-  type: Entry['type'];
-  float: boolean;
-}
-
 /**
- * 補記一段忘了按的實際紀錄，start、end 是分鐘數。成功回傳 null，失敗回傳原因與該修的欄位。
- *   結束要晚於開始，也不能晚於現在（過去的日子不限）。
- *   不能和已有的紀錄重疊，進行中的那一段算到現在。
- *   依開始時間插進紀錄，狀態、起床時間與習慣達標都照順序判斷。任務補記完就算做完，勾選它的習慣。
+ * 調整時間表確認時，把這一天的實際紀錄整份換掉（entries 要依開始時間排好）。
+ * 習慣的勾選跟著重新算：換掉前後牽涉到的習慣，當天有任務做完（按了結束、不是被打斷）就勾，沒有就拿掉。
+ * 不存檔，由呼叫的人一起存。
  */
-export function backfill(dk: string, item: BackfillItem, start: number, end: number, now: Date): { field: 'start' | 'end'; message: string } | null {
-  const elapsed = elapsedMinutes(dk, now);
-  if (end <= start) return { field: 'end', message: '結束時間要晚於開始時間。' };
-  if (end > elapsed) return { field: 'end', message: `結束時間不能晚於現在（${fmtTime(elapsed)}）。還在做的請用「現在」區塊的開始按鈕。` };
-  const log = logFor(dk);
-  const clash = log.find(e => start < (e.end ? toMin(e.end) : elapsed) && toMin(e.start) < end);
-  if (clash) {
-    const span = clash.end ? `${clash.start} 到 ${clash.end}` : `${clash.start} 起`;
-    return { field: 'start', message: `和已有的紀錄「${clash.label}」（${span}）重疊，請換個時間。` };
+export function replaceLog(dk: string, entries: Entry[]): void {
+  const habitsOf = (es: Entry[]) => es.flatMap(e => (e.float ? [] : [habitOf(e)])).filter((h): h is string => h !== null);
+  const touched = new Set([...habitsOf(logFor(dk)), ...habitsOf(entries)]);
+  if (entries.length) data.log[dk] = entries;
+  else delete data.log[dk];
+  const checks = { ...data.checks[dk] };
+  for (const h of touched) {
+    if (entries.some(e => !e.float && e.end && !e.cut && habitOf(e) === h)) checks[h] = true;
+    else delete checks[h];
   }
-  const e: Entry = { ref: item.ref, label: item.label, type: item.type, start: fmtTime(start), end: fmtTime(end) };
-  if (item.float) e.float = true;
-  const at = log.findIndex(x => toMin(x.start) > start);
-  if (!data.log[dk]) data.log[dk] = [e];
-  else data.log[dk].splice(at < 0 ? log.length : at, 0, e);
-  if (!item.float) autoCheck(dk, e);
-  save();
-  return null;
+  if (Object.keys(checks).length) data.checks[dk] = checks;
+  else delete data.checks[dk];
 }
 
 /**
@@ -208,27 +205,6 @@ export function plannedEnd(dk: string, e: Entry, blocks: Block[], floats: Float[
   const plan = e.float ? floats.find(f => f.id === e.ref) : blocks.find(b => b.id === e.ref);
   const left = !plan ? 0 : 'minutes' in plan ? plan.minutes : remainingOf(dk, plan);
   return toMin(e.start) + Math.max(left, 5);
-}
-
-/**
- * 調整時間表時，有實際紀錄的任務換成實際的時間（分鐘數），計畫才不會停在原本的時間。
- *   做完的：第一段開始到最後一段結束。
- *   進行中的：第一段開始到預計結束（實際開始加上還剩的長度），超過了就到現在。
- *   被浮動事項打斷的：假設現在接著做，現在加上還剩的長度。
- * 沒有紀錄、或是固定時段，回傳 null，照原本的計畫。
- */
-export function actualSpan(dk: string, b: Block, blocks: Block[], floats: Float[], now: Date): [number, number] | null {
-  const es = entriesOf(dk, b.id);
-  const last = es.at(-1);
-  if (!last || isLocked(b)) return null;
-  const start = toMin(es[0].start);
-  const elapsed = elapsedMinutes(dk, now);
-  const end = !last.end
-    ? Math.max(plannedEnd(dk, last, blocks, floats), elapsed)
-    : last.cut
-      ? Math.max(toMin(last.end), elapsed) + remainingOf(dk, b)
-      : toMin(last.end);
-  return [start, Math.min(Math.max(end, start + STEP_MIN), SLEEP_MIN)];
 }
 
 /**

@@ -2,8 +2,8 @@ import { html, nothing, type TemplateResult } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
 import { KIND_OF, KINDS, TYPE_LABEL } from '../config/kinds';
 import { LIFE_TYPES, isLocked, SLEEP_MIN } from '../lib/blocks';
-import { draftConflicts, type Draft } from '../lib/draft';
-import { entriesOf, logFor, plannedEnd, statusOf, type Status } from '../lib/log';
+import { draftConflicts, isRunningRow, type Draft } from '../lib/draft';
+import { logFor, plannedEnd, statusOf, type Status } from '../lib/log';
 import { floatsFor, isCanceled } from '../lib/schedule';
 import { dkey, elapsedMinutes, fmtDur, fmtTime, isDone, parseKey, toMin } from '../lib/time';
 import type { Block, BlockType, Entry } from '../types';
@@ -18,11 +18,13 @@ export const legend = () =>
   )}</ul>`;
 
 /**
- * 調整時一列可編輯的任務：時間與名稱，再來是類型、鎖定、移到暫待區與刪除。
+ * 調整時一列可編輯的任務：時間與名稱，再來是類型、有做、鎖定、移到暫待區與刪除。
  * 時間與先後都在上方的時間條（day-strip.ts）拖動來改，這裡只顯示目前的時間範圍與長度，邊拖邊更新。
- * 鎖定是切換按鈕（aria-pressed），鎖定的任務是固定時段，照時鐘走，不能拖動。欄位名稱只給閱讀器。
- * 狀態和平常的時間表一樣：任務看實際紀錄標完成、進行中、中斷、沒做，有紀錄的附上實際的時間當參考；
- * 固定時段照時鐘，今天結束了標「已過」。做完與沒做的底色下沉，並有文字標記，不只靠顏色區分。
+ * 做過的列就是實際紀錄，時間是實際的時間；沒做的是計畫。「有做」是切換按鈕（aria-pressed），
+ * 在現在之前開始的任務才能切換；浮動事項一定是做過的，不能切換，改用刪除。
+ * 鎖定也是切換按鈕，鎖定的任務是固定時段，照時鐘走，不能拖動；做過的不能鎖定，也不能移到暫待區。
+ * 標記：做過而且結束在現在之後的是「進行中」，浮動事項標「浮動」；計畫過了時間沒做的標「沒做」，
+ * 固定時段過了標「已過」。做過與過了的底色下沉，並有文字標記，不只靠顏色區分。
  * clash 表示和別的任務重疊，加上「重疊」文字。類型選單不列生活類型，起床、吃飯是浮動事項，休息是空白，都不是任務。
  * 欄位的值用 live()，比對畫面上的實際值。
  */
@@ -32,17 +34,17 @@ function editRow(d: Draft, i: number, now: Date, clash: boolean): TemplateResult
   const name = b.label.trim() || '未命名的任務';
   const bad = (f: 'label' | 'time') => mine.some(p => p.field === f);
   const locked = isLocked(b);
-  const st = locked ? null : statusOf(d.date, b, now);
-  const past = st ? st === 'done' || st === 'missed' : d.date === dkey(now) && isDone(b, elapsedMinutes(d.date, now));
-  const badge = st ? STATUS_BADGE[st] : past ? '已過' : '';
-  const es = locked ? [] : entriesOf(d.date, b.id);
-  const last = es.at(-1);
+  const elapsed = elapsedMinutes(d.date, now);
+  const running = isRunningRow(d.date, b, now);
+  const past = !running && isDone(b, elapsed);
+  const badge = running ? '進行中' : b.rec ? (b.rec.float ? '浮動' : '') : past ? (locked ? '已過' : '沒做') : '';
+  const canDone = !locked && !b.rec?.float && (!!b.rec || toMin(b.start) <= elapsed);
   const dur = fmtDur(toMin(b.end) - toMin(b.start));
   const types = (Object.keys(TYPE_LABEL) as BlockType[]).filter(t => !LIFE_TYPES.has(t) || t === b.type);
   return html`<li class="slot slot-edit ${past ? 'is-past' : ''} ${mine.length ? 'has-error' : ''} ${locked ? 'is-locked' : ''} ${clash ? 'is-clash' : ''}" data-i=${i}>
-    <span class="edit-time"><span class="edit-when">${timeRange(b.start, b.end)}</span><span class="edit-dur">${dur}</span>${es.length
-        ? html`<span class="edit-actual">實際 ${last?.end ? timeRange(es[0].start, last.end) : html`${es[0].start} 起`}</span>`
-        : ''}${badge ? html`<span class="badge">${badge}</span>` : ''}${clash ? html`<span class="badge badge-clash">重疊</span>` : ''}${bad('time') ? html`<span class="sr-only">（時間有問題）</span>` : ''}</span>
+    <span class="edit-time"><span class="edit-when">${timeRange(b.start, b.end)}</span><span class="edit-dur">${dur}</span>${badge
+        ? html`<span class="badge ${running ? 'badge-now' : ''}">${badge}</span>`
+        : ''}${clash ? html`<span class="badge badge-clash">重疊</span>` : ''}${bad('time') ? html`<span class="sr-only">（時間有問題）</span>` : ''}</span>
     <span class="edit-label"><label class="sr-only" for="r${i}-label">名稱</label><input type="text" id="r${i}-label" data-f="label" data-i=${i}
       aria-invalid=${bad('label') ? 'true' : nothing} aria-describedby=${bad('label') ? `r${i}-err` : nothing}
       maxlength="40" autocomplete="off" placeholder="任務名稱" .value=${live(b.label)}></span>
@@ -50,8 +52,11 @@ function editRow(d: Draft, i: number, now: Date, clash: boolean): TemplateResult
       ${types.map(t => html`<option value=${t} .selected=${live(t === b.type)}>${TYPE_LABEL[t]}</option>`)}
     </select></span>
     <span class="edit-tools">
-      <button type="button" class="btn edit-lock" data-act="lock" data-i=${i} aria-pressed=${locked ? 'true' : 'false'}>鎖定<span class="sr-only">：${name}</span></button>
-      ${locked ? '' : html`<button type="button" class="btn edit-park" data-act="park" data-i=${i}>暫待<span class="sr-only">：${name}</span></button>`}
+      ${canDone
+        ? html`<button type="button" class="btn edit-done" data-act="done" data-i=${i} aria-pressed=${b.rec ? 'true' : 'false'}>有做<span class="sr-only">：${name}</span></button>`
+        : ''}
+      ${b.rec ? '' : html`<button type="button" class="btn edit-lock" data-act="lock" data-i=${i} aria-pressed=${locked ? 'true' : 'false'}>鎖定<span class="sr-only">：${name}</span></button>`}
+      ${locked || b.rec ? '' : html`<button type="button" class="btn edit-park" data-act="park" data-i=${i}>暫待<span class="sr-only">：${name}</span></button>`}
       <button type="button" class="btn edit-del" data-act="delete" data-i=${i}>刪除<span class="sr-only">：${name}</span></button>
     </span>
     <p class="row-error" id="r${i}-err">${mine.map(p => p.message).join('')}</p>

@@ -9,7 +9,7 @@ import type { Block, Entry, Float } from '../types';
 import { timeRange } from './time-range';
 
 // 「現在」區塊：依實際紀錄顯示現在在做什麼。
-//   有任務或浮動事項在進行：名稱、已進行多久、進度尺、結束按鈕；超過預定長度太多時問還在不在做。
+//   有任務或浮動事項在進行：名稱、已進行多久、進度尺、結束按鈕，任務多一個暫停；超過預定長度太多時問還在不在做。
 //   固定時段（上課、通勤）照時鐘：名稱、還剩多久、進度尺，不用按。
 //   都沒有：休息，下面是下一個任務的開始按鈕，以及被打斷的任務的繼續按鈕。
 // 浮動事項（吃飯、洗澡、假日起床）的開始按鈕一直列在最下面，按下去會暫停正在做的任務。
@@ -59,6 +59,7 @@ function runningBody(m: number, r: Entry, planEnd: number, nxt: Block | undefine
       </div>`
     : html`<div class="hero-actions">
         <button type="button" class="btn btn-solid" data-run="end">結束<span class="sr-only">「${r.label}」</span></button>
+        ${r.float ? nothing : html`<button type="button" class="btn" data-run="pause">暫停<span class="sr-only">「${r.label}」</span></button>`}
       </div>`;
   return html`<p class="hero-eyebrow">${r.float ? '進行中・浮動' : '進行中'}</p>
     <h2 class="hero-title kind-${KIND_OF[r.type]}">${r.label}</h2>

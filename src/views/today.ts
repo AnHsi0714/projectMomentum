@@ -1,7 +1,6 @@
 import { html, type TemplateResult } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
 import { adjustBar, adjustEntry, adjustHint, insertForm } from '../components/adjust';
-import { backfillForm } from '../components/backfill';
 import { dayChips } from '../components/day-chips';
 import { dayStrip } from '../components/day-strip';
 import { habitList } from '../components/habit-list';
@@ -34,11 +33,8 @@ export function renderToday(): TemplateResult {
   // 固定時段照時鐘走：正在進行的紀錄碰到固定時段或就寢就自動結束
   settle(dk, blocks, now);
   const draft = state.draft?.date === dk ? state.draft : null;
-  // 過去的日子與舊版定稿的日子不能調整
-  const lockedNote =
-    dk < dkey(now) ? '這一天已經結束，不能再調整。'
-    : isConfirmed(dk) ? '這一天的時間表已經確認定稿，不能再調整。'
-    : null;
+  // 舊版定稿的日子不能調整；過去的日子可以，用來修正實際紀錄
+  const lockedNote = isConfirmed(dk) ? '這一天的時間表已經確認定稿，不能再調整。' : null;
 
   // 恢復模式只會取消還沒結束的運動，所以那天還有運動才顯示；已經啟用的一直顯示，才能關掉。
   // 剛切換過的也留著，見 state.recoverTouched
@@ -64,12 +60,11 @@ export function renderToday(): TemplateResult {
     <div class="today-grid ${draft ? 'is-adjusting' : ''}">
       <section class="sec">
         <div class="sec-head"><h2>時間表</h2>${legend()}</div>
-        ${draft ? adjustHint() : adjustEntry(lockedNote)}
+        ${draft ? adjustHint() : adjustEntry(lockedNote, dk < dkey(now))}
         ${draft ? dayStrip(draft) : ''}
         ${timeline(dk, blocks, now, draft)}
         ${pendingList(draft ? draft.pending : pendingFor(dk), !!draft)}
-        ${draft ? html`${insertForm(defaultStart)}${adjustBar()}` : ''}
-        ${!draft && dk <= dkey(now) ? backfillForm(blocks, floats) : ''}
+        ${draft ? html`${insertForm(defaultStart, floats)}${adjustBar()}` : ''}
       </section>
       <div class="stack">
         ${showRecover
