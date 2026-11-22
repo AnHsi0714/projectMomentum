@@ -35,13 +35,8 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
         type: null,
       },
       {
-        term: "下週課業準備",
-        meaning: "週日確認下週的課程、作業與考試。",
-        type: "plan",
-      },
-      {
         term: "每週回顧與下週規劃",
-        meaning: "回答「回顧」頁的問題，決定下週最重要的交付成果。",
+        meaning: "回答「回顧」頁的問題，確認下週的課程、作業與考試，決定下週最重要的交付成果。",
         type: "plan",
       },
     ],
