@@ -34,14 +34,14 @@ npm run dev
 
 ## 個人化時間表
 
-- **時間表**：`data/momentum.json` 的 `template`（每週範本），第一次執行時從 `src/config/schedule.ts` 的預設值產生。
+- **時間表**：在「設定」頁編輯每週範本，存在 `data/settings.json`。第一次執行時用 `src/config/schedule.ts` 的預設值。
 - **習慣與每週目標、回顧問題**：`src/config/habits.ts`。
 - **名詞說明**：`src/config/terms.ts`。
 
 ## 資料與隱私
 
-紀錄只存在自己的電腦：專案裡的 `data/momentum.json`，瀏覽器也會留一份暫存。  
-`data/` 已經列入 `.gitignore`，不會被提交到 Git。  
+紀錄與設定只存在自己的電腦：專案裡的 `data/momentum.json`（紀錄）與 `data/settings.json`（設定），瀏覽器也會留一份暫存。  
+這兩個檔案已經列入 `.gitignore`，不會被提交到 Git。  
 要備份請用「回顧」頁的匯出。
 
 ## 文件

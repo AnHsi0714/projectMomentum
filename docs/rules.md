@@ -8,8 +8,8 @@
 - 時段名稱的意思、命名規則與時間不夠時的取捨順序：網頁的「名詞」頁，內容寫在 `src/config/terms.ts`
 
 **時間表不抄在這裡。**  
-每天的時段以資料檔 `data/momentum.json` 的 `template`（每週範本）為唯一來源，要改時間表就改那裡，免得兩邊對不上。  
-資料檔還沒有範本時，用 `src/config/schedule.ts` 的預設值。
+每天的時段以「設定」頁的每週範本（存在 `data/settings.json`）為唯一來源，要改時間表就在那裡改，免得兩邊對不上。  
+設定檔還沒有範本時，用 `src/config/schedule.ts` 的預設值。
 
 目前是 V1：先定整體架構，運動與自主專案的細項還沒決定，見 [plan.md](plan.md)。
 
@@ -308,6 +308,13 @@ Momentum 只負責追蹤閱讀，不安排讀什麼。
 
 ## 異動紀錄
 
+- 2026-11-22：新增「設定」頁，在畫面上編輯每週範本。
+  - 設定和紀錄分開存：每週範本搬到 `data/settings.json`，紀錄留在 `data/momentum.json`。
+  - 固定和任務都排在時間表上，範本裡彼此不能重疊；起床一天最多一個。
+  - 可以把一天的活動複製到其他天，或還原成預設。
+  - 浮動事項的先後階段可以新增、改名、刪除與調整順序（1 到 n），還有活動在用的階段不能刪。
+  - 改了範本後，沒調整過的日子（包括過去的）照新範本顯示，調整過的日子不受影響。
+
 - 2026-11-22：習慣達標統一一套規則。
   - 固定時段有對應習慣的，結束時間到了就算完成，例如把運動設成固定也會自動達標。
   - 起床不再另外判斷：平日固定時段到了結束時間算達標，假日照舊和目標比。
@@ -385,7 +392,7 @@ Momentum 只負責追蹤閱讀，不安排讀什麼。
 
 ## 對應到程式
 
-- 時間表：`data/momentum.json` 的 `template`，預設值在 `src/config/schedule.ts` 的 `DEFAULT_TEMPLATE`。
+- 時間表：「設定」頁，存在 `data/settings.json` 的 `template`，預設值在 `src/config/schedule.ts` 的 `DEFAULT_TEMPLATE`。
 - 習慣與每週目標、調整與恢復的說明、回顧問題：`src/config/habits.ts`。  
   分別是 `HABITS`、`ADJUST_NOTE`、`RECOVER_NOTE`、`REVIEW_QUESTIONS`。
 - 任務對應哪個習慣：`src/config/habits.ts` 的 `TYPE_HABIT`，依類型對應。

@@ -22,20 +22,30 @@
 
 ## 資料存放
 
-- 主檔：`data/momentum.json`，由開發伺服器的 `/api/data` 讀寫。
+- 紀錄：`data/momentum.json`，由開發伺服器的 `/api/data` 讀寫。
+- 設定：`data/settings.json`，由 `/api/settings` 讀寫，在「設定」頁修改。
+  - 舊版把每週範本放在 `momentum.json`，第一次啟動時會搬到 `settings.json`。
 - 瀏覽器 localStorage 會同步存一份暫存。
   - 第一次啟動時若檔案是空的，會把瀏覽器裡的舊資料搬進檔案。
   - 伺服器沒開時，頁面右上角會顯示「僅存在瀏覽器」。
-- 「回顧」頁可匯出／匯入 JSON；匯入會覆蓋目前所有紀錄，執行前會先確認。
+- 「回顧」頁可匯出／匯入 JSON，備份檔包含紀錄和每週範本；匯入會覆蓋目前所有紀錄，執行前會先確認。
 - 紀錄是個人資料，已列入 `.gitignore`，不會被提交到 Git。
   - 儲存庫若是公開的，提交上去就等於公開你的筆記與回顧。
   - 要備份請用匯出，或定期把 `data/` 資料夾複製到自己的私人位置。
 
-資料結構（`src/types.ts` 的 `AppData`）：
+設定（`src/types.ts` 的 `Settings`，`data/settings.json`）：
 
 ```json
 {
-  "template": { "1": [{ "id": "wake", "label": "起床、盥洗、準備", "type": "wake", "mode": "clock", "start": "07:20", "minutes": 40 }, { "id": "dinner", "label": "晚餐", "type": "meal", "mode": "float", "minutes": 70, "stage": 2 }] },
+  "template": { "1": [{ "id": "wake", "label": "起床、盥洗、準備", "type": "wake", "mode": "clock", "start": "07:20", "minutes": 40 }, { "id": "dinner", "label": "晚餐", "type": "meal", "mode": "float", "minutes": 70, "stage": "evening" }] },
+  "stages": [{ "id": "wake", "label": "起床" }, { "id": "brunch", "label": "早午餐" }, { "id": "evening", "label": "洗澡與晚餐" }]
+}
+```
+
+紀錄（`src/types.ts` 的 `AppData`，`data/momentum.json`）：
+
+```json
+{
   "checks": { "2026-11-13": { "english": true } },
   "schedules": { "2026-11-13": [{ "id": "p1", "start": "09:00", "end": "10:30", "label": "深度工作：專案", "type": "deep" }, { "id": "tm3k2a1b", "start": "14:00", "end": "15:00", "label": "小組會議", "type": "event" }] },
   "pending": { "2026-11-13": [{ "id": "p5", "start": "16:00", "end": "16:40", "label": "運動", "type": "exercise" }] },
@@ -48,10 +58,12 @@
 ```
 
 - `template` 是每週範本，key 是星期（`0` 是週日），值是那一天的活動（`types.ts` 的 `Activity`）。
-  - 資料裡沒有時用 `src/config/schedule.ts` 的 `DEFAULT_TEMPLATE`，存檔後就寫進資料檔。  
-    之後改時間表要改資料檔的 `template`，改 `DEFAULT_TEMPLATE` 不會影響已經有範本的資料。
+  - 設定檔裡沒有時用 `src/config/schedule.ts` 的 `DEFAULT_TEMPLATE`。  
+    改時間表在「設定」頁改，改 `DEFAULT_TEMPLATE` 不會影響已經有範本的設定檔，只影響「還原成預設」。
   - `mode`：`clock` 固定（照時鐘走）、`press` 任務（按了才算）、`float` 浮動事項。
-  - `clock`、`press` 一定有 `start`；`float` 的 `start` 可省略，起床寫了就是目標時間。`stage` 只有 `float` 用。
+  - `clock`、`press` 一定有 `start`；`float` 的 `start` 可省略，起床寫了就是目標時間。`stage` 只有 `float` 用，是 `stages` 裡某個階段的 id。
+- `stages` 是浮動事項的先後階段，順序就是先後（畫面上寫 1 到 n）。沒有時用 `schedule.ts` 的 `DEFAULT_STAGES`。
+  - 舊資料的階段是數字 0、1、2，讀進來時換成預設階段的 id。
   - `id` 寫進資料後不再變，實際紀錄的 `ref` 靠它對應，同一天裡不能重複。
   - 某一天格式不對（缺欄位、id 重複、排到就寢之後），那一天整天改用預設範本。
   - 起床是類型 `wake` 的活動，固定的到了結束時間就算達標，浮動的按「起床」和 `start` 比。
@@ -151,9 +163,9 @@ src/
   - 表單欄位的值用 `.value=${live(...)}`、勾選用 `.checked=${live(...)}`，換天或換週時才會更新。
   - 事件不綁在模板上，統一由 `main.ts` 在 `#main` 上委派處理。
 
-- **改時間表**：編輯 `data/momentum.json` 的 `template`（格式見上面的資料結構），改完重新整理頁面。
-  - 目前還沒有設定畫面，之後會改成在畫面上編輯。
-  - `src/config/schedule.ts` 的 `DEFAULT_TEMPLATE` 只在資料檔沒有範本時使用。
+- **改時間表**：在「設定」頁改，存在 `data/settings.json` 的 `template`（格式見上面的資料結構）。
+  - 畫面在 `src/views/settings.ts`，事件在 `src/settings-page.ts`，草稿與儲存前的檢查在 `src/lib/template-draft.ts`。
+  - `src/config/schedule.ts` 的 `DEFAULT_TEMPLATE` 只在設定檔沒有範本、或按「還原成預設」時使用。
   - 自由時間與彈性時間不用寫，活動之間留空就是空白。
   - 就寢時間是 `schedule.ts` 的 `SLEEP_TIME`，時段名稱照 `src/config/terms.ts` 的用詞。
   - 只想臨時改某一天，用畫面上的「調整時間表」。
