@@ -38,7 +38,8 @@
 ```json
 {
   "template": { "1": [{ "id": "wake", "label": "起床、盥洗、準備", "type": "wake", "mode": "clock", "start": "07:20", "minutes": 40 }, { "id": "dinner", "label": "晚餐", "type": "meal", "mode": "float", "minutes": 70, "stage": "evening" }] },
-  "stages": [{ "id": "wake", "label": "起床" }, { "id": "brunch", "label": "早午餐" }, { "id": "evening", "label": "洗澡與晚餐" }]
+  "stages": [{ "id": "wake", "label": "起床" }, { "id": "brunch", "label": "早午餐" }, { "id": "evening", "label": "洗澡與晚餐" }],
+  "sleep": "23:30"
 }
 ```
 
@@ -62,6 +63,7 @@
     改時間表在「設定」頁改，改 `DEFAULT_TEMPLATE` 不會影響已經有範本的設定檔，只影響「還原成預設」。
   - `mode`：`clock` 固定（照時鐘走）、`press` 任務（按了才算）、`float` 浮動事項。
   - `clock`、`press` 一定有 `start`；`float` 的 `start` 可省略，起床寫了就是目標時間。`stage` 只有 `float` 用，是 `stages` 裡某個階段的 id。
+- `sleep` 是就寢時間，18:00 到 23:55。沒有時用 `schedule.ts` 的 `DEFAULT_SLEEP_TIME`；程式裡用 `SLEEP_TIME`、`SLEEP_MIN`，讀設定檔時更新。
 - `stages` 是浮動事項的先後階段，順序就是先後（畫面上寫 1 到 n）。沒有時用 `schedule.ts` 的 `DEFAULT_STAGES`。
   - 舊資料的階段是數字 0、1、2，讀進來時換成預設階段的 id。
   - `id` 寫進資料後不再變，實際紀錄的 `ref` 靠它對應，同一天裡不能重複。
@@ -164,10 +166,11 @@ src/
   - 事件不綁在模板上，統一由 `main.ts` 在 `#main` 上委派處理。
 
 - **改時間表**：在「設定」頁改，存在 `data/settings.json` 的 `template`（格式見上面的資料結構）。
-  - 畫面在 `src/views/settings.ts`，事件在 `src/settings-page.ts`，草稿與儲存前的檢查在 `src/lib/template-draft.ts`。
+  - 畫面在 `src/views/settings.ts`，事件在 `src/settings-page.ts`。
+  - 整份設定的草稿（每一天、先後階段、復原）在 `src/lib/settings-draft.ts`，某一天的草稿與儲存前的檢查在 `src/lib/template-draft.ts`。
   - `src/config/schedule.ts` 的 `DEFAULT_TEMPLATE` 只在設定檔沒有範本、或按「還原成預設」時使用。
   - 自由時間與彈性時間不用寫，活動之間留空就是空白。
-  - 就寢時間是 `schedule.ts` 的 `SLEEP_TIME`，時段名稱照 `src/config/terms.ts` 的用詞。
+  - 就寢時間在「設定」頁改，時段名稱照 `src/config/terms.ts` 的用詞。
   - 只想臨時改某一天，用畫面上的「調整時間表」。
 - **改任務對應的習慣**：編輯 `src/config/habits.ts` 的 `TYPE_HABIT`，依類型對應。
 - **改習慣或每週目標**：編輯 `src/config/habits.ts` 的 `HABITS`。  
