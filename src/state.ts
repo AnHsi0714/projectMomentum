@@ -1,6 +1,7 @@
 import type { Draft } from './lib/draft';
+import type { TemplateDraft } from './lib/template-draft';
 
-export type ViewId = 'today' | 'week' | 'review' | 'terms';
+export type ViewId = 'today' | 'week' | 'review' | 'terms' | 'settings';
 
 export const state: {
   /** 目前檢視的日期，三個畫面共用（週導覽以它所在的那一週為準） */
@@ -14,17 +15,23 @@ export const state: {
    * 但剛關掉時要留著，開關才不會在操作當下消失、焦點跟著不見；重新整理後才收起來
    */
   recoverTouched: string | null;
+  /** 設定頁正在編輯星期幾的範本（0=日） */
+  setDay: number;
+  /** 設定頁那一天範本的草稿，按儲存才寫進設定檔。切換星期或離開設定頁時丟掉 */
+  tdraft: TemplateDraft | null;
 } = {
   selDate: new Date(),
   followToday: true,
   draft: null,
   recoverTouched: null,
+  setDay: new Date().getDay(),
+  tdraft: null,
 };
 
 let lastRoute: ViewId = 'today';
 
 /** 網址 hash 是否是路由，例如 #/week */
-export const isRouteHash = (hash: string) => /^#\/(today|week|review|terms)$/.test(hash);
+export const isRouteHash = (hash: string) => /^#\/(today|week|review|terms|settings)$/.test(hash);
 
 /**
  * 由網址的 hash 決定畫面。不認識的 hash（例如頁內錨點）不會切換畫面，

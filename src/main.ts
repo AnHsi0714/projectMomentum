@@ -16,6 +16,8 @@ import { renderToday } from './views/today';
 import { renderReview } from './views/review';
 import { renderTerms } from './views/terms';
 import { renderWeek } from './views/week';
+import { renderSettings } from './views/settings';
+import { hasTemplateChanges, initSettingsPage, leaveTemplateDraft } from './settings-page';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 const main = $('#main');
@@ -25,10 +27,11 @@ const VIEWS: Record<ViewId, { title: string; render: () => TemplateResult }> = {
   week: { title: '本週', render: renderWeek },
   review: { title: '回顧', render: renderReview },
   terms: { title: '名詞', render: renderTerms },
+  settings: { title: '設定', render: renderSettings },
 };
 
 const STATUS_TEXT: Record<SaveStatus, string> = {
-  file: '已儲存到 data/momentum.json',
+  file: '已儲存到 data 資料夾',
   saving: '儲存中…',
   local: '僅存在瀏覽器，請用 npm run dev 開啟',
   error: '儲存失敗，請確認伺服器仍在執行',
@@ -56,8 +59,12 @@ function focusStill(el: HTMLElement): void {
  * 焦點改放到頁面標題，不會掉到頁面最前面。
  * 調整中的欄位內容都在 state.draft 裡，所以重畫不會丟掉使用者改到一半的東西。
  */
+/** 畫面上目前是哪一頁，換頁時用來判斷是不是離開設定頁 */
+let shown: ViewId | null = null;
+
 function render(navigated = false) {
   const view = currentRoute();
+  shown = view;
   const hadFocus = main.contains(document.activeElement) && document.activeElement !== main;
 
   // 訊息區沒有綁定內容，lit-html 不會清它；照原本的習慣，每次重畫先清掉上一次的訊息
@@ -480,6 +487,8 @@ main.addEventListener('keydown', e => {
   announceConflicts();
 });
 
+initSettingsPage(main, { render, setMessage, focusStill });
+
 setStatusListener(s => {
   const status = $('#save-status');
   status.dataset.state = s;
@@ -492,12 +501,18 @@ setStatusListener(s => {
 });
 
 window.addEventListener('hashchange', () => {
-  if (isRouteHash(location.hash)) render(true);
+  if (!isRouteHash(location.hash)) return;
+  // 離開設定頁時，範本有沒儲存的變更先問；想留下來就把網址改回設定頁（不會再觸發 hashchange）
+  if (shown === 'settings' && location.hash !== '#/settings' && !leaveTemplateDraft()) {
+    history.replaceState(null, '', '#/settings');
+    return;
+  }
+  render(true);
 });
 
 // 調整時間表還沒確認就關掉分頁或重新整理，先提醒
 window.addEventListener('beforeunload', e => {
-  if (state.draft && isDirty(state.draft)) e.preventDefault();
+  if ((state.draft && isDirty(state.draft)) || hasTemplateChanges()) e.preventDefault();
 });
 
 // 跳過連結直接把焦點移到主內容，不改網址 hash（hash 是路由用的）

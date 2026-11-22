@@ -1638,3 +1638,88 @@ select {
   color: var(--text-muted);
   font-size: 0.875rem;
 }
+
+// 設定頁：每週範本。一個活動一張卡片，欄位和插入表單一樣排成格狀，窄螢幕自動換行
+
+.act-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.act-row {
+  fieldset {
+    margin: 0;
+    padding: 0.75rem;
+    border: 1px solid var(--line-strong);
+  }
+
+  legend {
+    padding-inline: 0.25rem;
+    font-weight: 700;
+  }
+
+  .actions {
+    margin-top: 0.5rem;
+  }
+
+  &.has-error fieldset {
+    border: 2px solid var(--danger);
+  }
+
+  [aria-invalid='true'] {
+    border-color: var(--danger);
+    outline: 1px solid var(--danger);
+  }
+}
+
+.act-error {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  color: var(--danger);
+  font-size: 0.9375rem;
+  font-weight: 700;
+
+  &:empty {
+    display: none;
+  }
+}
+
+.set-days {
+  margin-top: 0.75rem;
+}
+
+.set-copy {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: 0 0.75rem;
+}
+
+// 先後階段：一列是名稱、順序與刪除，窄螢幕名稱獨佔一行
+.stage-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6rem auto;
+  align-items: end;
+  gap: 0.5rem 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+
+  @media (max-width: 30rem) {
+    grid-template-columns: minmax(0, 1fr) auto;
+
+    .field-label:first-child {
+      grid-column: 1 / -1;
+    }
+  }
+}
