@@ -1,4 +1,5 @@
 import { html, type TemplateResult } from 'lit-html';
+import { checkMark } from '../components/check';
 import { dayCard } from '../components/day-card';
 import { viewHead } from '../components/view-head';
 import { weekNav, weekTitle } from '../components/week-nav';
@@ -24,7 +25,7 @@ export function renderWeek(): TemplateResult {
     return html`<li class="wh">
       <span class="wh-name">${h.name}</span>
       <ul class="wh-days" role="list">${days}</ul>
-      <span class="wh-total ${done ? 'is-done' : ''}">${n}/${h.target}${done ? ' 達標' : ''}</span>
+      <span class="wh-total ${done ? 'is-done' : ''}">${n}/${h.target}${done ? html` ${checkMark()}` : ''}</span>
     </li>`;
   });
 

@@ -115,7 +115,7 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
       {
         term: "起床、盥洗、準備",
         meaning: "起床到出門或開始第一件事之前。",
-        type: "prep",
+        type: "wake",
       },
       { term: "洗澡、整理", meaning: "回家或運動後洗澡、收拾。", type: "prep" },
       {

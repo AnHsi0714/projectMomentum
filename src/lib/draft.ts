@@ -1,10 +1,10 @@
 import type { Block, Entry, Float } from '../types';
 import {
-  baseBlocks, blanks, conflicts, copyBlock, dayProblems, durOf, isBlockType, isLocked, LIFE_TYPES, mergeTouching, moveBlock, newId,
-  resizeBlock, sameTask, SLEEP_MIN, sortBlocks, STEP_MIN, touches, withLock, type Conflict, type Problem,
+  blanks, conflicts, copyBlock, dayProblems, durOf, isBlockType, isClock, LIFE_TYPES, mergeTouching, moveBlock, newId,
+  resizeBlock, sameTask, SLEEP_MIN, sortBlocks, STEP_MIN, touches, withClock, type Conflict, type Problem,
 } from './blocks';
 import { logFor, plannedEnd, replaceLog } from './log';
-import { applyDay, blocksFor, floatsFor, pendingFor, plannedWake } from './schedule';
+import { applyDay, baseBlocks, blocksFor, floatsFor, pendingFor, wakeFor } from './schedule';
 import { currentTime, dkey, elapsedMinutes, fmtTime, parseKey, toMin } from './time';
 
 /**
@@ -17,7 +17,7 @@ import { currentTime, dkey, elapsedMinutes, fmtTime, parseKey, toMin } from './t
  *   沒做的照計畫列出，改的是計畫。
  *   「有做」切換一列是實際還是計畫：忘了按開始，就把任務拖到實際的時間再按「有做」。
  *
- * 只要沒定稿，哪一天都能調整，包括過去的日子。鎖定的固定時段不能拖動。
+ * 只要沒定稿，哪一天都能調整，包括過去的日子。固定時段不能拖動。
  * 任務可以暫時重疊，重疊的地方列成衝突，全部解開才能確認（見 draftConflicts）。
  */
 
@@ -59,7 +59,7 @@ export const isRunningRow = (date: string, b: DraftRow, now: Date): boolean =>
  * 把一天整理成草稿的列：每一段實際紀錄一列，沒有紀錄的計畫各一列。
  * 進行中的那一段，結束先當成預計結束（實際開始加上還剩的長度），已經超過就到下一個 5 分鐘。
  * 開始與結束在同一分鐘的紀錄（剛開始就被打斷）沒有長度，不列出，確認後也就不留。
- * 做過的列一律不鎖定，才能拖動。
+ * 做過的列一律不是固定，才能拖動。
  */
 function buildRows(dk: string, plan: Block[], now: Date): DraftRow[] {
   const elapsed = elapsedMinutes(dk, now);
@@ -78,7 +78,7 @@ function buildRows(dk: string, plan: Block[], now: Date): DraftRow[] {
     if (e.cut) rec.cut = true;
     if (e.long) rec.long = true;
     const label = (e.float ? undefined : plan.find(b => b.id === e.ref)?.label) ?? e.label;
-    return [withLock<DraftRow>({ id: `r${i}`, start: e.start, end: fmtTime(finish), label, type: e.type, rec }, false)];
+    return [{ id: `r${i}`, start: e.start, end: fmtTime(finish), label, type: e.type, mode: 'press', rec }];
   });
   return sortBlocks([...rows, ...plan.filter(b => !recorded.has(b.id)).map(copyBlock)]);
 }
@@ -96,7 +96,7 @@ export const isDirty = (d: Draft): boolean =>
 
 /**
  * 兩列是不是同一件事，接在一起或重疊時確認會合併成一段：
- * 做過的看是不是同一個任務或浮動事項的紀錄；計畫看名稱、類型與鎖定是否都相同。做過的和計畫不合併。
+ * 做過的看是不是同一個任務或浮動事項的紀錄；計畫看名稱、類型與是否固定都相同。做過的和計畫不合併。
  */
 export const sameItem = (a: DraftRow, b: DraftRow): boolean =>
   a.rec && b.rec ? a.rec.ref === b.rec.ref : !a.rec && !b.rec && sameTask(a, b);
@@ -146,14 +146,14 @@ export function sortDraft(d: Draft, keep?: DraftRow): number {
 export function stripStart(d: Draft): number {
   const hour = (b: Block | undefined) => (b ? Math.floor(toMin(b.start) / 60) * 60 : SLEEP_MIN);
   const first = d.blocks.reduce<Block | undefined>((a, b) => (!a || toMin(b.start) < toMin(a.start) ? b : a), undefined);
-  // 假日起床是浮動事項，不在時間表上：從起床準備完的整點開始，早上的任務才拖得到更早
-  const wake = plannedWake(new Date(`${d.date}T00:00`).getDay());
-  const afterWake = wake ? Math.floor((toMin(wake) + 30) / 60) * 60 : SLEEP_MIN;
+  // 浮動的起床不在時間表上：從起床準備完的整點開始，早上的任務才拖得到更早
+  const wake = wakeFor(parseKey(d.date).getDay());
+  const afterWake = wake?.start ? Math.floor((toMin(wake.start) + wake.minutes) / 60) * 60 : SLEEP_MIN;
   return Math.max(0, Math.min(hour(d.original[0]), hour(first), afterWake));
 }
 
 /**
- * 使用者在某一列改了名稱或類型。不重畫、不排序，邊打字邊更新草稿。改類型時保留原本的鎖定狀態。
+ * 使用者在某一列改了名稱或類型。不重畫、不排序，邊打字邊更新草稿。改類型時保留原本是不是固定。
  * 起床、吃飯、休息這類生活類型不能當成任務的類型（固定時段例外）。
  * 做過的任務被打斷分成好幾段時，名稱與類型是同一個任務的，所以每一段一起改。
  */
@@ -164,20 +164,20 @@ export function setField(d: Draft, index: number, field: 'label' | 'type', value
   for (const i of same) {
     const x = d.blocks[i];
     if (field === 'label') x.label = value;
-    else if (isBlockType(value) && (!LIFE_TYPES.has(value) || isLocked(x))) d.blocks[i] = withLock({ ...x, type: value }, isLocked(x));
+    else if (isBlockType(value) && (!LIFE_TYPES.has(value) || isClock(x))) d.blocks[i] = { ...x, type: value };
   }
   // 這一列改過，之前標的問題先拿掉，下次儲存會重新檢查
   d.problems = d.problems.filter(p => !same.includes(p.index));
 }
 
-/** 切換鎖定。生活類型（睡前準備、平日起床）解除鎖定就不再是時段，所以不能解除；做過的也不能鎖定 */
+/** 切換固定。生活類型（睡前準備、平日起床）解除固定就不再是時段，所以不能解除；做過的也不能設成固定 */
 export function toggleLock(d: Draft, index: number): Result {
   const b = d.blocks[index];
   if (!b) return { ok: false, error: '找不到這個任務。' };
   if (b.rec) return { ok: false, error: `「${nameOf(b)}」已經做過，不能設成固定。` };
-  const locked = !isLocked(b);
+  const locked = !isClock(b);
   if (!locked && LIFE_TYPES.has(b.type)) return { ok: false, error: `「${nameOf(b)}」是固定時段，不能解除固定。` };
-  d.blocks[index] = withLock(b, locked);
+  d.blocks[index] = withClock(b, locked);
   return {
     ok: true,
     index,
@@ -193,7 +193,7 @@ export function toggleLock(d: Draft, index: number): Result {
 export function toggleDone(d: Draft, index: number, now: Date): Result {
   const b = d.blocks[index];
   if (!b) return { ok: false, error: '找不到這個任務。' };
-  if (isLocked(b)) return { ok: false, error: `「${nameOf(b)}」是固定時段，照時鐘走，不用記有沒有做。` };
+  if (isClock(b)) return { ok: false, error: `「${nameOf(b)}」是固定時段，照時鐘走，不用記有沒有做。` };
   if (b.rec) {
     if (b.rec.float) return { ok: false, error: `「${nameOf(b)}」是浮動事項，沒做的話請按刪除。` };
     const ref = b.rec.ref;
@@ -227,7 +227,8 @@ export interface NewTask {
   type: Block['type'];
   start: string;
   minutes: number;
-  locked: boolean;
+  /** 固定時段：照時鐘走，不用按 */
+  clock: boolean;
   float?: Float;
 }
 
@@ -251,9 +252,9 @@ export function insertRow(d: Draft, t: NewTask, now: Date): Result {
   const end = fmtTime(s + t.minutes);
   const id = newId();
   const block: DraftRow = t.float
-    ? withLock<DraftRow>({ id, start: t.start, end, label: t.float.label, type: t.float.type, rec: { ref: t.float.id, float: true } }, false)
-    : withLock<DraftRow>({ id, start: t.start, end, label: t.label.trim(), type: t.type }, t.locked);
-  if (!t.float && !t.locked && s + t.minutes <= elapsed) block.rec = { ref: id };
+    ? { id, start: t.start, end, label: t.float.label, type: t.float.type, mode: 'press', rec: { ref: t.float.id, float: true } }
+    : { id, start: t.start, end, label: t.label.trim(), type: t.type, mode: t.clock ? 'clock' : 'press' };
+  if (!t.float && !t.clock && s + t.minutes <= elapsed) block.rec = { ref: id };
   d.blocks.push(block);
   const index = sortDraft(d, block);
   d.problems = [];
@@ -279,7 +280,7 @@ export function removeRow(d: Draft, index: number): Result {
 export function parkRow(d: Draft, index: number): Result {
   const b = d.blocks[index];
   if (!b) return { ok: false, error: '找不到這個任務。' };
-  if (isLocked(b)) return { ok: false, error: `「${nameOf(b)}」是固定時段，不能移到暫待區。` };
+  if (isClock(b)) return { ok: false, error: `「${nameOf(b)}」是固定時段，不能移到暫待區。` };
   if (b.rec) return { ok: false, error: `「${nameOf(b)}」已經做過，不能移到暫待區。沒做的話先按「有做」取消。` };
   d.blocks.splice(index, 1);
   d.pending.push(b);
@@ -346,7 +347,7 @@ function recordedPlan(ref: string, segs: DraftRow[], old: Block | undefined, run
     start = toMin(segs[0].start);
     end = toMin(last.end);
   }
-  return withLock({ id: ref, start: fmtTime(start), end: fmtTime(Math.max(end, start + STEP_MIN)), label: last.label, type: last.type }, false);
+  return { id: ref, start: fmtTime(start), end: fmtTime(Math.max(end, start + STEP_MIN)), label: last.label, type: last.type, mode: 'press' };
 }
 
 /**

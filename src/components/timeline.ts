@@ -1,12 +1,14 @@
 import { html, nothing, type TemplateResult } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
+import { habitOf } from '../config/habits';
 import { KIND_OF, KINDS, TYPE_LABEL } from '../config/kinds';
-import { LIFE_TYPES, isLocked, SLEEP_MIN } from '../lib/blocks';
+import { LIFE_TYPES, isClock, SLEEP_MIN } from '../lib/blocks';
 import { draftConflicts, isRunningRow, type Draft } from '../lib/draft';
 import { logFor, plannedEnd, statusOf, type Status } from '../lib/log';
 import { floatsFor, isCanceled } from '../lib/schedule';
 import { dkey, elapsedMinutes, fmtDur, fmtTime, isDone, parseKey, toMin } from '../lib/time';
 import type { Block, BlockType, Entry } from '../types';
+import { checkMark } from './check';
 import { timeRange } from './time-range';
 
 // 時間表：平常是唯讀的清單，左邊實際的時間、右邊計畫的時間；調整中（有草稿）每一列換成可編輯的欄位。
@@ -18,11 +20,11 @@ export const legend = () =>
   )}</ul>`;
 
 /**
- * 調整時一列可編輯的任務：時間與名稱，再來是類型、有做、鎖定、移到暫待區與刪除。
+ * 調整時一列可編輯的任務：時間與名稱，再來是類型、有做、固定、移到暫待區與刪除。
  * 時間與先後都在上方的時間條（day-strip.ts）拖動來改，這裡只顯示目前的時間範圍與長度，邊拖邊更新。
  * 做過的列就是實際紀錄，時間是實際的時間；沒做的是計畫。「有做」是切換按鈕（aria-pressed），
  * 在現在之前開始的任務才能切換；浮動事項一定是做過的，不能切換，改用刪除。
- * 鎖定也是切換按鈕，鎖定的任務是固定時段，照時鐘走，不能拖動；做過的不能鎖定，也不能移到暫待區。
+ * 固定也是切換按鈕，固定時段照時鐘走，不能拖動；做過的不能設成固定，也不能移到暫待區。
  * 標記：做過而且結束在現在之後的是「進行中」，浮動事項標「浮動」；計畫過了時間沒做的標「沒做」，
  * 固定時段過了標「已過」。做過與過了的底色下沉，並有文字標記，不只靠顏色區分。
  * clash 表示和別的任務重疊，加上「重疊」文字。類型選單不列生活類型，起床、吃飯是浮動事項，休息是空白，都不是任務。
@@ -33,7 +35,7 @@ function editRow(d: Draft, i: number, now: Date, clash: boolean): TemplateResult
   const mine = d.problems.filter(p => p.index === i);
   const name = b.label.trim() || '未命名的任務';
   const bad = (f: 'label' | 'time') => mine.some(p => p.field === f);
-  const locked = isLocked(b);
+  const locked = isClock(b);
   const elapsed = elapsedMinutes(d.date, now);
   const running = isRunningRow(d.date, b, now);
   const past = !running && isDone(b, elapsed);
@@ -55,7 +57,7 @@ function editRow(d: Draft, i: number, now: Date, clash: boolean): TemplateResult
       ${canDone
         ? html`<button type="button" class="btn edit-done" data-act="done" data-i=${i} aria-pressed=${b.rec ? 'true' : 'false'}>有做<span class="sr-only">：${name}</span></button>`
         : ''}
-      ${b.rec ? '' : html`<button type="button" class="btn edit-lock" data-act="lock" data-i=${i} aria-pressed=${locked ? 'true' : 'false'}>鎖定<span class="sr-only">：${name}</span></button>`}
+      ${b.rec ? '' : html`<button type="button" class="btn edit-lock" data-act="lock" data-i=${i} aria-pressed=${locked ? 'true' : 'false'}>固定<span class="sr-only">：${name}</span></button>`}
       ${locked || b.rec ? '' : html`<button type="button" class="btn edit-park" data-act="park" data-i=${i}>暫待<span class="sr-only">：${name}</span></button>`}
       <button type="button" class="btn edit-del" data-act="delete" data-i=${i}>刪除<span class="sr-only">：${name}</span></button>
     </span>
@@ -63,8 +65,8 @@ function editRow(d: Draft, i: number, now: Date, clash: boolean): TemplateResult
   </li>`;
 }
 
-/** 任務狀態在列上的標記文字。還沒開始的不標 */
-const STATUS_BADGE: Record<Status, string> = { todo: '', running: '進行中', cut: '中斷', done: '完成', missed: '沒做' };
+/** 任務狀態在列上的標記。還沒開始的不標，完成的打勾（見 check.ts） */
+const STATUS_BADGE: Record<Status, string | TemplateResult> = { todo: '', running: '進行中', cut: '中斷', done: checkMark(), missed: '沒做' };
 
 /** 平常的一列要顯示的內容。start、end 是分鐘數，用來排順序與算中間的休息 */
 interface ViewItem {
@@ -76,7 +78,7 @@ interface ViewItem {
   time: TemplateResult;
   /** 右邊的說明：計畫的時間，或「浮動」 */
   plan?: TemplateResult | string;
-  badge: string;
+  badge: string | TemplateResult;
   current: boolean;
   past: boolean;
   canceled: boolean;
@@ -106,14 +108,15 @@ function entryItem(dk: string, e: Entry, plan: Block | undefined, elapsed: numbe
 
 /**
  * 沒有實際紀錄的時段，照計畫的時間排。任務過了時間沒做標「沒做」；
- * 固定時段照時鐘走，今天標「現在」與已過。
+ * 固定時段照時鐘走，今天標「現在」與已過。有對應習慣的固定時段（例如平日起床）過了就算完成，打勾。
  */
 function planItem(dk: string, b: Block, now: Date, today: boolean, elapsed: number): ViewItem {
   const start = toMin(b.start);
   const end = toMin(b.end);
-  const task = !isLocked(b);
+  const task = !isClock(b);
   const st = task ? statusOf(dk, b, now) : null;
   const current = !task && today && start <= elapsed && elapsed < end;
+  const clockDone = !task && habitOf(b) !== null && end <= elapsed && !isCanceled(dk, b);
   // 現在已經到了預定時間卻還沒按開始，標出來，不然這段時間看起來像是什麼都沒發生
   const due = st === 'todo' && today && start <= elapsed;
   return {
@@ -122,7 +125,7 @@ function planItem(dk: string, b: Block, now: Date, today: boolean, elapsed: numb
     type: b.type,
     label: b.label,
     time: timeRange(b.start, b.end),
-    badge: due ? '還沒開始' : st ? STATUS_BADGE[st] : current ? '現在' : '',
+    badge: due ? '還沒開始' : st ? STATUS_BADGE[st] : current ? '現在' : clockDone ? checkMark() : '',
     current,
     past: task ? st === 'missed' : today && isDone(b, elapsed),
     canceled: isCanceled(dk, b),

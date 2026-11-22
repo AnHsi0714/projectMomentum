@@ -1,7 +1,7 @@
 import { habitOf } from '../config/habits';
 import type { Block, Entry, Float } from '../types';
-import { durOf, isLocked, isWake, SLEEP_MIN } from './blocks';
-import { floatsFor, isCanceled, plannedWake } from './schedule';
+import { durOf, isClock, isWake, SLEEP_MIN } from './blocks';
+import { blocksFor, floatsFor, isCanceled } from './schedule';
 import { data, save } from './store';
 import { elapsedMinutes, fmtTime, parseKey, toMin } from './time';
 
@@ -12,7 +12,7 @@ import { elapsedMinutes, fmtTime, parseKey, toMin } from './time';
 //   任務也可以自己按「暫停」，和被浮動事項打斷一樣記成中斷。
 //   固定時段（上課、通勤、睡前準備）照時鐘走，不用按；它開始時，正在進行的紀錄自動結束。
 //   忘了按、按錯或時間不對，在調整時間表裡直接改實際紀錄，確認時整天換掉（replaceLog）。
-// 習慣是否達標只看實際紀錄：同一個習慣有任務按了結束就算達標；起床依起床時間自動判斷。
+// 習慣是否完成見下面的 habitItems。
 
 /** 一個任務今天的狀態。missed 是預定時間已經過了還沒開始（用 id 查時，看的是就寢時間） */
 export type Status = 'todo' | 'running' | 'cut' | 'done' | 'missed';
@@ -49,7 +49,7 @@ export const remainingOf = (dk: string, b: Block): number => Math.max(0, durOf(b
 
 /** 下一個要做的任務：預定時間還沒過、還沒開始的第一個。時間過了沒開始的算沒做，不往後排；恢復模式取消的運動跳過 */
 export const nextTask = (dk: string, blocks: Block[], now: Date): Block | undefined =>
-  blocks.find(b => !isLocked(b) && statusOf(dk, b, now) === 'todo' && !isCanceled(dk, b));
+  blocks.find(b => !isClock(b) && statusOf(dk, b, now) === 'todo' && !isCanceled(dk, b));
 
 /** 被打斷或暫停、還沒做完的任務，最近停下來的排前面。休息時每一個都有「繼續」 */
 export function cutTasks(dk: string, blocks: Block[], now: Date): Block[] {
@@ -80,44 +80,63 @@ export function floatsLeft(dk: string, floats: Float[]): Float[] {
   return floats.filter(f => !done.includes(f) && f.stage >= stage);
 }
 
-/** 實際的起床時間：按過「起床」的開始時間；沒按起床就直接開始別的事，用今天第一筆紀錄的開始時間。平日起床是固定時段，回傳 undefined */
+/** 實際的起床時間：按過「起床」的開始時間；沒按起床就直接開始別的事，用今天第一筆紀錄的開始時間。固定的起床回傳 undefined */
 export const wokeAt = (dk: string, floats: Float[]): string | undefined => {
   const wake = floats.find(isWake);
   if (!wake) return undefined;
   return entriesOf(dk, wake.id)[0]?.start ?? logFor(dk)[0]?.start;
 };
 
-// 習慣達標
+// 習慣
+// 有對應習慣（見 config/habits.ts 的 TYPE_HABIT）的活動，三種都用同一套規則算完成：
+//   任務：按了結束（不是被打斷）才算完成。
+//   固定時段：照時鐘走，到了結束時間就算完成，恢復模式取消的不算。
+//   浮動事項、有目標時間（例如假日起床 08:30）：比目標晚 30 分鐘以內開始才算完成。
 
-/** 起床晚於目標多少分鐘以內還算達標 */
-export const WAKE_GRACE = 30;
+/** 浮動事項比目標時間晚多少分鐘以內開始，還算完成 */
+export const TARGET_GRACE = 30;
 
-/**
- * 「固定時間起床與睡覺」是否達標，依起床時間自動判斷：假日看按「起床」的時間，和目標差 30 分鐘以內算達標；
- * 平日起床是固定時段，到了起床時間就算達標。還不能判斷（還沒到起床時間、假日還沒按起床而且還沒超過寬限）回傳 null。
- */
-export function wakeResult(dk: string, now: Date): { ok: boolean; at?: string; target: string } | null {
-  const day = parseKey(dk).getDay();
-  const target = plannedWake(day);
-  if (!target) return null;
-  const limit = toMin(target) + WAKE_GRACE;
-  const elapsed = elapsedMinutes(dk, now);
-  const wake = floatsFor(day).find(isWake);
-  if (!wake) return elapsed >= toMin(target) ? { ok: true, at: target, target } : null;
-  const at = wokeAt(dk, [wake]);
-  if (at) return { ok: toMin(at) <= limit, at, target };
-  return elapsed > limit ? { ok: false, target } : null;
+/** 今天某個習慣的一項：一個任務、固定時段或有目標時間的浮動事項。note 是沒完成時的說明 */
+export interface HabitItem {
+  ref: string;
+  done: boolean;
+  note?: string;
 }
 
-/** 今天實際做過的任務，依習慣分組：每個習慣做了哪些任務（id）。浮動事項不算 */
-export function startedByHabit(dk: string): Map<string, string[]> {
-  const out = new Map<string, string[]>();
+/**
+ * 今天每個習慣有哪些項目，依習慣分組。只列已經開始或已經能判斷的：
+ *   任務：按過開始的。
+ *   固定時段：開始時間到了的，結束時間到了就完成。
+ *   有目標時間的浮動事項：按過開始的，或已經超過目標加寬限還沒開始的（沒完成）。
+ */
+export function habitItems(dk: string, now: Date): Map<string, HabitItem[]> {
+  const out = new Map<string, HabitItem[]>();
+  const add = (habit: string | null, item: HabitItem) => {
+    if (!habit) return;
+    const list = out.get(habit) ?? [];
+    if (!list.some(i => i.ref === item.ref)) list.push(item);
+    out.set(habit, list);
+  };
+  const day = parseKey(dk).getDay();
+  const elapsed = elapsedMinutes(dk, now);
+
   for (const e of logFor(dk)) {
-    const habit = e.float ? null : habitOf(e);
-    if (!habit) continue;
-    const refs = out.get(habit) ?? [];
-    if (!refs.includes(e.ref)) refs.push(e.ref);
-    out.set(habit, refs);
+    if (!e.float) add(habitOf(e), { ref: e.ref, done: refStatus(dk, e.ref, now) === 'done' });
+  }
+  for (const b of blocksFor(dk, day)) {
+    if (isClock(b) && toMin(b.start) <= elapsed && !isCanceled(dk, b)) add(habitOf(b), { ref: b.id, done: toMin(b.end) <= elapsed });
+  }
+  for (const f of floatsFor(day)) {
+    if (!f.start) continue;
+    const verb = isWake(f) ? '起床' : '開始';
+    const limit = toMin(f.start) + TARGET_GRACE;
+    const at = isWake(f) ? wokeAt(dk, [f]) : entriesOf(dk, f.id)[0]?.start;
+    if (at) {
+      const done = toMin(at) <= limit;
+      add(habitOf(f), { ref: f.id, done, note: done ? undefined : `${at} ${verb}，目標 ${f.start}` });
+    } else if (elapsed > limit) {
+      add(habitOf(f), { ref: f.id, done: false, note: `還沒${verb}，目標 ${f.start}` });
+    }
   }
   return out;
 }
@@ -237,7 +256,7 @@ export function settle(dk: string, blocks: Block[], now: Date): boolean {
   if (!r) return false;
   const m = elapsedMinutes(dk, now);
   const s = toMin(r.start);
-  const stops = blocks.filter(isLocked).map(b => toMin(b.start)).filter(t => t > s && t <= m);
+  const stops = blocks.filter(isClock).map(b => toMin(b.start)).filter(t => t > s && t <= m);
   if (m >= SLEEP_MIN) stops.push(SLEEP_MIN);
   if (!stops.length) return false;
   close(dk, Math.min(...stops), false);

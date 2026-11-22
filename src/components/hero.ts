@@ -1,7 +1,7 @@
 import { html, nothing, type TemplateResult } from 'lit-html';
 import { KIND_OF } from '../config/kinds';
 import { SLEEP_TIME } from '../config/schedule';
-import { isLocked, SLEEP_MIN } from '../lib/blocks';
+import { isClock, SLEEP_MIN } from '../lib/blocks';
 import { cutTasks, floatsLeft, logFor, nextTask, plannedEnd, previousTask, remainingOf, running } from '../lib/log';
 import { isCanceled } from '../lib/schedule';
 import { fmtDur, fmtTime, toMin } from '../lib/time';
@@ -157,8 +157,8 @@ export function hero(now: Date, dk: string, blocks: Block[], floats: Float[], ad
   const m = now.getHours() * 60 + now.getMinutes();
   const r = running(dk);
   const next = nextTask(dk, blocks, now);
-  const fixed = blocks.find(b => isLocked(b) && toMin(b.start) <= m && m < toMin(b.end));
-  const upcoming = blocks.find(b => toMin(b.start) > m && !isLocked(b)) ?? next;
+  const fixed = blocks.find(b => isClock(b) && toMin(b.start) <= m && m < toMin(b.end));
+  const upcoming = blocks.find(b => toMin(b.start) > m && !isClock(b)) ?? next;
   let body: TemplateResult;
   if (r) body = runningBody(m, r, plannedEnd(dk, r, blocks, floats), next, previousTask(dk, blocks));
   else if (fixed) body = fixedBody(m, dk, fixed, upcoming);

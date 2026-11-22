@@ -260,7 +260,7 @@ function insert(d: Draft) {
   if (!start) return fail('new-start', '開始時間請用 24 小時制，例如 1400 或 14:00。');
   if (!Number.isInteger(minutes) || minutes < STEP_MIN) return fail('new-len', `長度至少 ${STEP_MIN} 分鐘，請填整數。`);
   if (!isBlockType(type)) return fail('new-type', '請選擇類型。');
-  const r = insertRow(d, { label, type, start, minutes, locked: field('new-lock').checked, float }, now);
+  const r = insertRow(d, { label, type, start, minutes, clock: field('new-lock').checked, float }, now);
   if (!r.ok) return fail('new-start', r.error);
   field('new-label').value = '';
   render();

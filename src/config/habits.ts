@@ -1,20 +1,26 @@
-import type { Block, Habit } from "../types";
-
-/** 有對應任務的習慣，會自動勾選；其餘的靠手動 */
-export const AUTO_HABITS: ReadonlySet<string> = new Set(["project", "english", "reading", "workout", "review"]);
+import type { Block, BlockType, Habit } from "../types";
 
 /**
- * 任務對應到哪個習慣。任務按結束、而且當天同一個習慣的任務都完成時，自動勾選這個習慣；
- * 「今天」頁的今日達標也依這個對應列出。沒有對應的（起床睡覺、課業整理）回傳 null，靠手動勾選。
+ * 每個類型的活動完成時算哪個習慣。沒寫的類型（上課、通勤、吃飯等）不算任何習慣。
+ * 怎樣算完成依活動的 mode 而定，見 lib/log.ts 的 habitItems。
  */
-export function habitOf(b: Pick<Block, "type" | "label">): string | null {
-  if (b.label.includes("每週回顧")) return "review";
-  if (b.type === "deep") return "project";
-  if (b.type === "english") return "english";
-  if (b.type === "reading") return "reading";
-  if (b.type === "exercise") return "workout";
-  return null;
-}
+export const TYPE_HABIT: Partial<Record<BlockType, string>> = {
+  deep: "project",
+  english: "english",
+  reading: "reading",
+  exercise: "workout",
+  plan: "review",
+  wake: "sleep",
+};
+
+/** 有對應任務的習慣，會自動勾選；其餘的（課業整理）沒有任務對應 */
+export const AUTO_HABITS: ReadonlySet<string> = new Set(Object.values(TYPE_HABIT));
+
+/**
+ * 任務對應到哪個習慣，看類型（TYPE_HABIT）。任務按結束時自動勾選這個習慣；
+ * 「今天」頁的今日達標也依這個對應列出。沒有對應的回傳 null。
+ */
+export const habitOf = (b: Pick<Block, "type">): string | null => TYPE_HABIT[b.type] ?? null;
 
 export const HABITS: Habit[] = [
   { id: "sleep", name: "固定時間起床與睡覺", target: 7, detail: "" },

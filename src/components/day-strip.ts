@@ -1,6 +1,6 @@
 import { html, nothing, type TemplateResult } from 'lit-html';
 import { KIND_OF } from '../config/kinds';
-import { blanks, isLocked, lanes, SLEEP_MIN, STEP_MIN, type Conflict } from '../lib/blocks';
+import { blanks, isClock, lanes, SLEEP_MIN, STEP_MIN, type Conflict } from '../lib/blocks';
 import { draftConflicts, draftMerges, stripStart, type Draft } from '../lib/draft';
 import { fmtDur, fmtTime, pad, toMin } from '../lib/time';
 import type { Block } from '../types';
@@ -48,7 +48,7 @@ function conflictList(d: Draft): TemplateResult {
       ? html`<p class="hint">把任務拖開、縮短或刪除，全部解開才能確認。按下面的項目會選到那個任務，可以直接用方向鍵移開。</p>
           <ul class="conflict-list" role="list">
             ${found.map(c => {
-              const target = !isLocked(d.blocks[c.b]) ? c.b : c.a;
+              const target = !isClock(d.blocks[c.b]) ? c.b : c.a;
               return html`<li><button type="button" class="btn conflict-item" data-act="goto" data-i=${target}>${conflictText(d.blocks, c)}</button></li>`;
             })}
           </ul>`
@@ -112,7 +112,7 @@ export function dayStrip(d: Draft): TemplateResult | typeof nothing {
           const label = html`${e - s >= LABEL_MIN ? stripLabel(nameOf(b.label), e - s) : ''}${pop}`;
           const cls = `seg kind-${KIND_OF[b.type]} ${clash.has(i) ? 'is-clash' : ''}`;
           const pos = `${segSpan(s, e)}; --lane: ${lane[i]}`;
-          if (isLocked(b)) {
+          if (isClock(b)) {
             // 固定的時段不能操作，閱讀器從下面的清單就知道它的時間，這裡只給看的
             return html`<span class=${`${cls} is-locked`} style=${pos} aria-hidden="true">${label}<span class="seg-lock">固定</span></span>`;
           }

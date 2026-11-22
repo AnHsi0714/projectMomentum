@@ -1,13 +1,13 @@
-import type { Float, Row } from "../types";
+import type { Activity, BlockType, Mode, WeekTemplate } from "../types";
 
 // 星期：0=日 1=一 ... 6=六
 // 時段名稱的用詞與先後順序見 src/config/terms.ts（網頁的「名詞」頁）
-// SCHEDULE 是時間條上的時段，分兩種：
-//   固定：鎖定的時段（上課、通勤、睡前準備、平日起床），照時鐘自動開始與結束，不用按。
-//     第五個欄位是鎖定：省略時上課、通勤、臨時行程預設鎖定，見 src/lib/blocks.ts 的 isLocked。
-//   任務：其餘的時段，按「開始」才開始、按「結束」才結束。
-// 時段之間沒排東西的時間就是「空白」（自由時間、彈性時間），畫面上寫成休息，不另外列。
-// 浮動事項（假日起床、吃飯、洗澡）不排在時間條上，另外列在 FLOATS。
+// 每天的活動存在資料檔的 template（每週範本），這裡只是資料檔還沒有範本時的預設值。
+// 活動依 mode 分三種（見 types.ts 的 Mode）：
+//   clock 固定：時間條上的固定時段（上課、通勤、睡前準備、平日起床），照時鐘自動開始與結束，不用按。
+//   press 任務：時間條上的任務，按「開始」才開始、按「結束」才結束。
+//   float 浮動事項：吃飯、洗澡、假日起床，不排在時間條上，按「開始」才開始，並暫停正在做的任務。
+// 活動之間沒排東西的時間就是「空白」（自由時間、彈性時間），畫面上寫成休息，不另外列。
 
 /** 每天的就寢時間，任何任務都不能排到這之後 */
 export const SLEEP_TIME = "23:30";
@@ -24,121 +24,119 @@ export const DAY_THEME: Record<number, string> = {
   0: "課業整理與每週回顧日",
 };
 
-/** 每個時段的 id 是 p 加上它在那一天的位置，從 0 開始 */
-export const SCHEDULE: Record<number, Row[]> = {
-  1: [
-    ["07:20", "08:00", "起床、盥洗、準備", "prep", true],
-    ["08:00", "09:00", "通勤", "commute"],
-    ["09:00", "18:30", "上課", "class"],
-    ["18:30", "19:30", "通勤回家", "commute"],
-    ["21:00", "21:30", "輕量英文或課業整理", "english"],
-    ["21:30", "22:00", "閱讀", "reading"],
-    ["23:00", "23:30", "睡前準備", "prep", true],
-  ],
-  2: [
-    ["08:25", "09:00", "起床、盥洗、準備", "prep", true],
-    ["09:00", "10:00", "通勤", "commute"],
-    ["10:00", "16:00", "上課", "class"],
-    ["16:00", "17:00", "通勤回家", "commute"],
-    ["18:00", "19:30", "深度工作：課業或專案", "deep"],
-    ["21:30", "22:00", "英文", "english"],
-    ["22:00", "22:30", "閱讀", "reading"],
-    ["23:00", "23:30", "睡前準備", "prep", true],
-  ],
-  3: [
-    ["07:20", "08:00", "起床、盥洗、準備", "prep", true],
-    ["08:00", "09:00", "通勤", "commute"],
-    ["09:00", "16:00", "上課", "class"],
-    ["16:00", "17:00", "通勤回家", "commute"],
-    ["18:00", "19:30", "深度工作：課業", "deep"],
-    ["21:30", "22:00", "英文", "english"],
-    ["22:00", "22:30", "閱讀", "reading"],
-    ["23:00", "23:30", "睡前準備", "prep", true],
-  ],
-  4: [
-    ["07:20", "08:00", "起床、盥洗、準備", "prep", true],
-    ["08:00", "09:00", "通勤", "commute"],
-    ["09:00", "15:00", "上課", "class"],
-    ["15:00", "16:00", "通勤回家", "commute"],
-    ["16:20", "17:00", "運動", "exercise"],
-    ["20:00", "21:30", "深度工作：專案或 HCI", "deep"],
-    ["21:30", "22:00", "閱讀", "reading"],
-    ["23:00", "23:30", "睡前準備", "prep", true],
-  ],
-  5: [
-    ["10:00", "11:30", "深度工作：專案", "deep"],
-    ["12:00", "13:00", "英文", "english"],
-    ["14:00", "15:30", "深度工作：文獻或 HCI", "deep"],
-    ["16:00", "16:40", "運動", "exercise"],
-    ["17:40", "18:10", "閱讀或課業整理", "reading"],
-    ["23:00", "23:30", "睡前準備", "prep", true],
-  ],
-  6: [
-    ["10:00", "11:30", "深度工作：專案", "deep"],
-    ["12:00", "13:00", "英文", "english"],
-    ["14:00", "15:30", "深度工作：文獻或 HCI", "deep"],
-    ["16:00", "16:40", "運動", "exercise"],
-    ["17:40", "18:10", "閱讀或個人興趣", "reading"],
-    ["23:00", "23:30", "睡前準備", "prep", true],
-  ],
-  0: [
-    ["10:00", "11:30", "深度工作：課業", "deep"],
-    ["12:00", "13:00", "英文", "english"],
-    ["14:00", "15:00", "閱讀", "reading"],
-    ["15:30", "16:00", "輕量活動", "exercise"],
-    ["20:30", "21:00", "每週回顧與下週規劃", "plan"],
-    ["23:00", "23:30", "睡前準備", "prep", true],
-  ],
+const minutesOf = (start: string, end: string) => {
+  const m = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+  return m(end) - m(start);
 };
 
-// 浮動事項：長度大致固定，但不知道什麼時候開始，按「開始」才開始，並暫停正在做的任務。
-// stage 是先後階段：起床 0，早午餐 1，洗澡與晚餐 2（同一階段不分先後）。後面階段的做過了，前面還沒做的就不再列出。
-// 列的順序就是按鈕的順序。id 寫在實際紀錄裡，改了舊紀錄就對不上。
-const WAKE: Float = {
-  id: "wake",
-  label: "起床、盥洗、準備",
-  type: "prep",
-  minutes: 30,
-  stage: 0,
-};
-const BRUNCH: Float = {
-  id: "brunch",
-  label: "早午餐",
-  type: "meal",
-  minutes: 60,
-  stage: 1,
-};
-const SHOWER: Float = {
-  id: "shower",
-  label: "洗澡、整理",
-  type: "prep",
-  minutes: 50,
-  stage: 2,
-};
-const DINNER: Float = {
-  id: "dinner",
-  label: "晚餐",
-  type: "meal",
-  minutes: 70,
-  stage: 2,
-};
+/** 排在時間條上的活動：固定（clock）或任務（press） */
+const timed =
+  (mode: Mode) =>
+  (start: string, end: string, label: string, type: BlockType, id?: string): Activity => ({
+    id: id ?? type,
+    label,
+    type,
+    mode,
+    start,
+    minutes: minutesOf(start, end),
+  });
+const clock = timed("clock");
+const press = timed("press");
 
-export const FLOATS: Record<number, Float[]> = {
-  1: [SHOWER, DINNER],
-  2: [SHOWER, DINNER],
-  3: [SHOWER, DINNER],
-  4: [SHOWER, DINNER],
-  5: [WAKE, BRUNCH, SHOWER, DINNER],
-  6: [WAKE, BRUNCH, SHOWER, DINNER],
-  0: [WAKE, BRUNCH, SHOWER, DINNER],
-};
+const WAKE_LABEL = "起床、盥洗、準備";
+const wakeAt = (start: string, end: string) => clock(start, end, WAKE_LABEL, "wake");
+const WAKE_FLOAT: Activity = { id: "wake", label: WAKE_LABEL, type: "wake", mode: "float", start: "08:30", minutes: 30, stage: 0 };
+const BRUNCH: Activity = { id: "brunch", label: "早午餐", type: "meal", mode: "float", minutes: 60, stage: 1 };
+const SHOWER: Activity = { id: "shower", label: "洗澡、整理", type: "prep", mode: "float", minutes: 50, stage: 2 };
+const DINNER: Activity = { id: "dinner", label: "晚餐", type: "meal", mode: "float", minutes: 70, stage: 2 };
+const BEDTIME = clock("23:00", "23:30", "睡前準備", "prep", "bedtime");
 
 /**
- * 假日的起床目標。假日起床是浮動事項，按「起床」的時間和這個目標比；
- * 沒寫的日子（平日）起床是固定時段，目標是 SCHEDULE 那一天的第一列。
+ * 預設的每週範本。id 寫進資料檔後就不再變，實際紀錄靠它對應到活動，同一天裡不能重複。
+ * 浮動事項的順序就是按鈕的順序。
  */
-export const WAKE_TARGET: Partial<Record<number, string>> = {
-  5: "08:30",
-  6: "08:30",
-  0: "08:30",
+export const DEFAULT_TEMPLATE: WeekTemplate = {
+  1: [
+    wakeAt("07:20", "08:00"),
+    clock("08:00", "09:00", "通勤", "commute", "commute-go"),
+    clock("09:00", "18:30", "上課", "class"),
+    clock("18:30", "19:30", "通勤回家", "commute", "commute-back"),
+    press("21:00", "21:30", "輕量英文或課業整理", "english"),
+    press("21:30", "22:00", "閱讀", "reading"),
+    BEDTIME,
+    SHOWER,
+    DINNER,
+  ],
+  2: [
+    wakeAt("08:25", "09:00"),
+    clock("09:00", "10:00", "通勤", "commute", "commute-go"),
+    clock("10:00", "16:00", "上課", "class"),
+    clock("16:00", "17:00", "通勤回家", "commute", "commute-back"),
+    press("18:00", "19:30", "深度工作：課業或專案", "deep"),
+    press("21:30", "22:00", "英文", "english"),
+    press("22:00", "22:30", "閱讀", "reading"),
+    BEDTIME,
+    SHOWER,
+    DINNER,
+  ],
+  3: [
+    wakeAt("07:20", "08:00"),
+    clock("08:00", "09:00", "通勤", "commute", "commute-go"),
+    clock("09:00", "16:00", "上課", "class"),
+    clock("16:00", "17:00", "通勤回家", "commute", "commute-back"),
+    press("18:00", "19:30", "深度工作：課業", "deep"),
+    press("21:30", "22:00", "英文", "english"),
+    press("22:00", "22:30", "閱讀", "reading"),
+    BEDTIME,
+    SHOWER,
+    DINNER,
+  ],
+  4: [
+    wakeAt("07:20", "08:00"),
+    clock("08:00", "09:00", "通勤", "commute", "commute-go"),
+    clock("09:00", "15:00", "上課", "class"),
+    clock("15:00", "16:00", "通勤回家", "commute", "commute-back"),
+    press("16:20", "17:00", "運動", "exercise"),
+    press("20:00", "21:30", "深度工作：專案或 HCI", "deep"),
+    press("21:30", "22:00", "閱讀", "reading"),
+    BEDTIME,
+    SHOWER,
+    DINNER,
+  ],
+  5: [
+    press("10:00", "11:30", "深度工作：專案", "deep", "deep-am"),
+    press("12:00", "13:00", "英文", "english"),
+    press("14:00", "15:30", "深度工作：文獻或 HCI", "deep", "deep-pm"),
+    press("16:00", "16:40", "運動", "exercise"),
+    press("17:40", "18:10", "閱讀或課業整理", "reading"),
+    BEDTIME,
+    WAKE_FLOAT,
+    BRUNCH,
+    SHOWER,
+    DINNER,
+  ],
+  6: [
+    press("10:00", "11:30", "深度工作：專案", "deep", "deep-am"),
+    press("12:00", "13:00", "英文", "english"),
+    press("14:00", "15:30", "深度工作：文獻或 HCI", "deep", "deep-pm"),
+    press("16:00", "16:40", "運動", "exercise"),
+    press("17:40", "18:10", "閱讀或個人興趣", "reading"),
+    BEDTIME,
+    WAKE_FLOAT,
+    BRUNCH,
+    SHOWER,
+    DINNER,
+  ],
+  0: [
+    press("10:00", "11:30", "深度工作：課業", "deep"),
+    press("12:00", "13:00", "英文", "english"),
+    press("14:00", "15:00", "閱讀", "reading"),
+    press("15:30", "16:00", "輕量活動", "exercise"),
+    press("20:30", "21:00", "每週回顧與下週規劃", "plan"),
+    BEDTIME,
+    WAKE_FLOAT,
+    BRUNCH,
+    SHOWER,
+    DINNER,
+  ],
 };

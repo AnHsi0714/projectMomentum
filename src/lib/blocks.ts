@@ -1,14 +1,14 @@
 import { TYPE_LABEL } from '../config/kinds';
-import { FLOATS, SCHEDULE, SLEEP_TIME } from '../config/schedule';
-import type { Block, BlockType, Float, Row } from '../types';
+import { SLEEP_TIME } from '../config/schedule';
+import type { Activity, Block, BlockType, Float, WeekTemplate } from '../types';
 import { fmtTime, toMin } from './time';
 
 // 這個檔案只放時段的純運算（驗證、分類、拖動、衝突），不碰儲存，方便單獨測試。
-// 原定時間表的每一列分成三種：
-//   固定：鎖定的時段（上課、通勤、臨時行程、睡前準備、平日起床），照時鐘自動開始與結束，不能拖。
-//   任務：按「開始」才開始的時段（深度工作、英文、運動、閱讀、規劃），調整時可以自由拖動。
-//   浮動事項：沒鎖定的起床、洗澡、吃飯，不排在時間表上，按「開始」才開始（見 types.ts 的 Float）。
-// 沒鎖定的休息不另外列，就是任務之間的空白。一天的時間表只放固定與任務；
+// 每週範本的活動轉成一天的時段時分成三種（見 types.ts 的 Mode）：
+//   固定（clock）：上課、通勤、臨時行程、睡前準備、平日起床，照時鐘自動開始與結束，不能拖。
+//   任務（press）：深度工作、英文、運動、閱讀、規劃），按「開始」才開始，調整時可以自由拖動。
+//   浮動事項（float）：假日起床、洗澡、吃飯，不排在時間表上，按「開始」才開始（見 types.ts 的 Float）。
+// 休息不另外列，就是任務之間的空白。一天的時間表只放固定與任務；
 // 調整時任務可以暫時重疊，沒有衝突才能儲存。
 
 /** 就寢時間的分鐘數，任何任務都不能排到這之後；時間本身在 config/schedule.ts 的 SLEEP_TIME */
@@ -35,39 +35,75 @@ export function parseTimeInput(raw: string): string | null {
 /** 新任務的 id：時間加亂數，同一天裡不會重複 */
 export const newId = (): string => `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-// 鎖定與分類
-
-/** 沒有特別設定時，這些類型的任務是鎖定的：時間由別人決定，照時鐘自動開始與結束 */
-const LOCKED_TYPES: ReadonlySet<BlockType> = new Set(['class', 'commute', 'event']);
+// 固定與分類
 
 /** 不能當成任務類型的生活類型：起床、洗澡、吃飯是浮動事項，休息是空白 */
-export const LIFE_TYPES: ReadonlySet<BlockType> = new Set(['prep', 'meal', 'rest']);
+export const LIFE_TYPES: ReadonlySet<BlockType> = new Set(['wake', 'prep', 'meal', 'rest']);
 
-const defaultLocked = (type: BlockType) => LOCKED_TYPES.has(type);
+/** 固定時段：照時鐘自動開始與結束，不能拖動，到了結束時間就算完成 */
+export const isClock = (b: Pick<Block, 'mode'>): boolean => b.mode === 'clock';
 
-export const isLocked = (b: Pick<Block, 'type' | 'locked'>): boolean => b.locked ?? defaultLocked(b.type);
+/** 設定固定或任務，回傳新的時段（其他欄位照抄） */
+export const withClock = <T extends Block>(b: T, clock: boolean): T => ({ ...b, mode: clock ? 'clock' : 'press' });
 
-/** 設定鎖定，回傳新的任務（其他欄位照抄）。和類型的預設相同時不寫 locked，紀錄才能和原定時間表直接比對 */
-export function withLock<T extends Block>(b: T, locked: boolean): T {
-  const { locked: _, ...base } = b;
-  return (locked === defaultLocked(b.type) ? base : { ...base, locked }) as T;
-}
+// 每週範本
 
-/** 原定時間表的一列轉成時段，id 是它在那一天的位置 */
-function fromRow(row: Row, id: string): Block {
-  const [start, end, label, type, locked] = row;
-  const b: Block = { id, start, end, label, type };
-  return locked === undefined ? b : withLock(b, locked);
-}
+/** 範本裡排在時間條上的活動（固定與任務）轉成時段，id 照抄，依開始時間排好 */
+export const blocksOf = (acts: Activity[]): Block[] =>
+  sortBlocks(
+    acts.flatMap(a =>
+      a.mode === 'float' || !a.start
+        ? []
+        : [{ id: a.id, start: a.start, end: fmtTime(toMin(a.start) + a.minutes), label: a.label, type: a.type, mode: a.mode }],
+    ),
+  );
 
-/** 星期 day 原定的時間表（固定與任務），id 是 p 加上列的位置 */
-export const baseBlocks = (day: number): Block[] => SCHEDULE[day].map((row, i) => fromRow(row, `p${i}`));
+/** 範本裡的浮動事項，順序照範本（就是按鈕的順序）。有開始時間的是目標時間 */
+export const floatsOf = (acts: Activity[]): Float[] =>
+  acts.flatMap(a => {
+    if (a.mode !== 'float') return [];
+    const f: Float = { id: a.id, label: a.label, type: a.type, minutes: a.minutes, stage: a.stage ?? 0 };
+    if (a.start) f.start = a.start;
+    return [f];
+  });
 
-/** 星期 day 的浮動事項（起床、洗澡、吃飯），依先後階段排好 */
-export const floatsFor = (day: number): Float[] => FLOATS[day].map(f => ({ ...f }));
+/** 範本裡的起床（類型是 wake 的活動），沒有就是 undefined */
+export const wakeOf = (acts: Activity[]): Activity | undefined => acts.find(a => a.type === 'wake');
 
 /** 浮動事項是不是起床：起床的時間會顯示在「本週」頁，也用來判斷起床是否達標 */
-export const isWake = (f: Pick<Float, 'id'>): boolean => f.id === 'wake';
+export const isWake = (f: Pick<Float, 'type'>): boolean => f.type === 'wake';
+
+const MODES: ReadonlySet<unknown> = new Set(['clock', 'press', 'float']);
+
+/** 範本裡的一個活動格式是否正確：排在時間條上的要有開始時間，而且在就寢前結束 */
+function parseActivity(raw: unknown): Activity | null {
+  if (!isRecord(raw)) return null;
+  const { id, label, type, mode, start, minutes, stage } = raw;
+  if (typeof id !== 'string' || !id || typeof label !== 'string' || !label.trim() || !isBlockType(type)) return null;
+  if (!MODES.has(mode) || typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < STEP_MIN) return null;
+  if (start !== undefined && !isTime(start)) return null;
+  if (mode !== 'float' && (start === undefined || toMin(start) + minutes > SLEEP_MIN)) return null;
+  if (stage !== undefined && (typeof stage !== 'number' || !Number.isInteger(stage) || stage < 0)) return null;
+  const a: Activity = { id, label, type, mode: mode as Activity['mode'], minutes };
+  if (start !== undefined) a.start = start;
+  if (stage !== undefined) a.stage = stage;
+  return a;
+}
+
+/**
+ * 讀取每週範本。某一天格式不對（缺了、有一個活動不對、id 重複）就整天用 fallback 的那一天，
+ * 不會因為一個錯字讓那一天少了活動卻沒發現。
+ */
+export function parseTemplate(raw: unknown, fallback: WeekTemplate): WeekTemplate {
+  const out: WeekTemplate = {};
+  for (let day = 0; day < 7; day++) {
+    const list = isRecord(raw) ? raw[day] : undefined;
+    const acts = Array.isArray(list) ? list.map(parseActivity) : null;
+    const ok = acts && acts.every((a): a is Activity => a !== null) && new Set(acts.map(a => a!.id)).size === acts.length;
+    out[day] = ok ? (acts as Activity[]) : fallback[day].map(a => ({ ...a }));
+  }
+  return out;
+}
 
 export const copyBlock = <T extends Block>(b: T): T => ({ ...b });
 export const durOf = (b: Pick<Block, 'start' | 'end'>): number => toMin(b.end) - toMin(b.start);
@@ -76,9 +112,13 @@ export const durOf = (b: Pick<Block, 'start' | 'end'>): number => toMin(b.end) -
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+/** 舊版沒寫 locked 時，這些類型預設是固定時段。只用在讀取舊資料，新資料一律寫 mode */
+const LEGACY_LOCKED_TYPES: ReadonlySet<unknown> = new Set(['class', 'commute', 'event']);
+
 /**
  * 一個時段的格式是否正確（不檢查和別的時段有沒有重疊）。接受新的物件格式，
  * 也接受舊版的陣列 [開始, 結束, 內容, 類型, 鎖定]，舊版的用 fallbackId 當 id。
+ * 舊版沒有 mode，用 locked 換算；locked 也沒寫的，上課、通勤、臨時行程是固定，其餘是任務。
  */
 function parseBlock(raw: unknown, fallbackId: string): Block | null {
   let o: Record<string, unknown>;
@@ -87,14 +127,19 @@ function parseBlock(raw: unknown, fallbackId: string): Block | null {
     o = { id: fallbackId, start: raw[0], end: raw[1], label: raw[2], type: raw[3], ...(raw.length === 5 ? { locked: raw[4] } : {}) };
   } else if (isRecord(raw)) o = raw;
   else return null;
-  const { id, start, end, label, type, locked } = o;
+  const { id, start, end, label, type, mode, locked } = o;
   if (typeof id !== 'string' || !id) return null;
   if (!isTime(start) || !isTime(end) || typeof label !== 'string' || !label.trim() || !isBlockType(type)) return null;
   if (toMin(end) <= toMin(start)) return null;
+  if (mode !== undefined && mode !== 'clock' && mode !== 'press') return null;
   if (locked !== undefined && typeof locked !== 'boolean') return null;
-  const b: Block = { id, start, end, label, type };
-  return locked === undefined ? b : withLock(b, locked);
+  const clock = mode !== undefined ? mode === 'clock' : (locked ?? LEGACY_LOCKED_TYPES.has(type));
+  return { id, start, end, label, type: legacyType(type, label), mode: clock ? 'clock' : 'press' };
 }
+
+/** 舊版的起床和睡前準備、洗澡共用 prep 類型，讀進來時名稱有「起床」的改成 wake */
+export const legacyType = (type: BlockType, label: string): BlockType =>
+  type === 'prep' && label.includes('起床') ? 'wake' : type;
 
 /**
  * 舊版把自由時間與彈性時間當成任務，現在它們是空白：讀進來時拿掉，留下空白。
@@ -102,8 +147,8 @@ function parseBlock(raw: unknown, fallbackId: string): Block | null {
 const isLegacyBlank = (row: unknown): boolean =>
   Array.isArray(row) && (row[3] === 'free' || (typeof row[2] === 'string' && row[2].trim() === '彈性時間'));
 
-/** 舊紀錄裡沒鎖定的起床、洗澡、吃飯、休息，現在是浮動事項或空白，不放在時間表上 */
-const isLife = (b: Block): boolean => LIFE_TYPES.has(b.type) && !isLocked(b);
+/** 舊紀錄裡不是固定的起床、洗澡、吃飯、休息，現在是浮動事項或空白，不放在時間表上 */
+const isLife = (b: Block): boolean => LIFE_TYPES.has(b.type) && !isClock(b);
 
 /**
  * 檢查從備份或檔案讀進來的一天時間表。有一列格式不對就回傳 null，
@@ -135,9 +180,9 @@ export const sortBlocks = <T extends Block>(blocks: T[]): T[] => [...blocks].sor
 /** 兩個時段相鄰或重疊（接在一起也算） */
 export const touches = (a: Block, b: Block): boolean => toMin(a.start) <= toMin(b.end) && toMin(b.start) <= toMin(a.end);
 
-/** 名稱、類型與鎖定都相同的兩個任務，接在一起或重疊時會合併 */
+/** 名稱、類型與是否固定都相同的兩個任務，接在一起或重疊時會合併 */
 export const sameTask = (a: Block, b: Block): boolean =>
-  a.label.trim() === b.label.trim() && a.type === b.type && isLocked(a) === isLocked(b);
+  a.label.trim() === b.label.trim() && a.type === b.type && isClock(a) === isClock(b);
 
 /**
  * 把 same 認定是同一件事、而且相鄰或重疊的時段合併成一個：開始是較早的，結束是較晚的，id 用較早的。
@@ -162,7 +207,7 @@ export function mergeTouching<T extends Block>(
   return { blocks: out, merged: blocks.length - out.length };
 }
 
-/** 名稱、類型與鎖定都相同、而且相鄰或重疊的任務合併成一個（見 mergeTouching） */
+/** 名稱、類型與是否固定都相同、而且相鄰或重疊的任務合併成一個（見 mergeTouching） */
 export const mergeSame = (blocks: Block[]): { blocks: Block[]; merged: number } => mergeTouching(blocks, sameTask);
 
 // 衝突
@@ -234,11 +279,11 @@ export function dayProblems(blocks: Block[]): Problem[] {
 
 /**
  * 整塊移動第 i 個任務，長度不變。可以越過、蓋過其他任務（變成衝突，之後再處理），
- * 最早到 earliest（時間條左端），最晚到就寢。鎖定的任務不能動。直接改傳進來的陣列。
+ * 最早到 earliest（時間條左端），最晚到就寢。固定時段不能動。直接改傳進來的陣列。
  */
 export function moveBlock(blocks: Block[], i: number, start: number, earliest: number): void {
   const b = blocks[i];
-  if (!b || isLocked(b)) return;
+  if (!b || isClock(b)) return;
   const len = durOf(b);
   const s = Math.min(Math.max(start, earliest), SLEEP_MIN - len);
   b.start = fmtTime(s);
@@ -248,7 +293,7 @@ export function moveBlock(blocks: Block[], i: number, start: number, earliest: n
 /** 拉長或縮短第 i 個任務（改結束時間），至少 5 分鐘，最晚到就寢，可以蓋過後面的任務。直接改傳進來的陣列 */
 export function resizeBlock(blocks: Block[], i: number, end: number): void {
   const b = blocks[i];
-  if (!b || isLocked(b)) return;
+  if (!b || isClock(b)) return;
   b.end = fmtTime(Math.min(Math.max(end, toMin(b.start) + STEP_MIN), SLEEP_MIN));
 }
 

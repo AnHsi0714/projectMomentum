@@ -34,7 +34,7 @@ npm run dev
 
 ## 個人化時間表
 
-- **時間表**：`src/config/schedule.ts`，每個時段寫成 `[開始, 結束, 名稱, 類型]`。
+- **時間表**：`data/momentum.json` 的 `template`（每週範本），第一次執行時從 `src/config/schedule.ts` 的預設值產生。
 - **習慣與每週目標、回顧問題**：`src/config/habits.ts`。
 - **名詞說明**：`src/config/terms.ts`。
 

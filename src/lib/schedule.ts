@@ -1,10 +1,19 @@
-import { SCHEDULE, WAKE_TARGET } from '../config/schedule';
-import type { Block, BlockType } from '../types';
-import { baseBlocks, sortBlocks } from './blocks';
+import type { Activity, Block, BlockType, Float } from '../types';
+import { blocksOf, floatsOf, sortBlocks, wakeOf } from './blocks';
 import { data, save } from './store';
 import { elapsedMinutes, parseKey, toMin } from './time';
 
-export { floatsFor } from './blocks';
+/** 星期 day 在每週範本裡的活動 */
+export const templateFor = (day: number): Activity[] => data.template[day] ?? [];
+
+/** 星期 day 原定的時間表（固定與任務），由每週範本產生 */
+export const baseBlocks = (day: number): Block[] => blocksOf(templateFor(day));
+
+/** 星期 day 的浮動事項（起床、洗澡、吃飯），順序就是按鈕的順序 */
+export const floatsFor = (day: number): Float[] => floatsOf(templateFor(day));
+
+/** 星期 day 的起床設定（範本裡類型是起床的活動） */
+export const wakeFor = (day: number): Activity | undefined => wakeOf(templateFor(day));
 
 /**
  * 某一天的計畫（固定與任務，不含浮動事項）：調整過的用調整後的，沒調整過的用原定時間表。
@@ -24,8 +33,8 @@ export const isConfirmed = (dateKey: string): boolean => data.confirmed[dateKey]
 export const blocksOfType = (blocks: Block[], ...types: BlockType[]): Block[] =>
   blocks.filter(b => types.includes(b.type));
 
-/** 原定的起床時間：假日看 WAKE_TARGET，平日是原定時間表的第一列（固定的起床時段） */
-export const plannedWake = (day: number): string | null => WAKE_TARGET[day] ?? SCHEDULE[day][0]?.[0] ?? null;
+/** 原定的起床時間：範本裡起床的開始時間，浮動的就是目標時間 */
+export const plannedWake = (day: number): string | null => wakeFor(day)?.start ?? null;
 
 // 恢復模式
 

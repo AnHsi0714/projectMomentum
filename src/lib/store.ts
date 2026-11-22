@@ -1,5 +1,6 @@
+import { DEFAULT_TEMPLATE } from '../config/schedule';
 import type { AppData, Block, Entry } from '../types';
-import { baseBlocks, isBlockType, isTime, parseBlocks, parsePending } from './blocks';
+import { blocksOf, isBlockType, isTime, legacyType, parseBlocks, parsePending, parseTemplate } from './blocks';
 import { parseKey, toMin } from './time';
 
 const LS_KEY = 'momentum.v1';
@@ -7,7 +8,10 @@ const API = '/api/data';
 
 export type SaveStatus = 'file' | 'local' | 'saving' | 'error';
 
-const emptyData = (): AppData => ({ checks: {}, schedules: {}, pending: {}, log: {}, confirmed: {}, recover: {}, notes: {}, reviews: {} });
+const emptyData = (): AppData => ({
+  template: parseTemplate(DEFAULT_TEMPLATE, DEFAULT_TEMPLATE),
+  checks: {}, schedules: {}, pending: {}, log: {}, confirmed: {}, recover: {}, notes: {}, reviews: {},
+});
 
 export const data: AppData = emptyData();
 
@@ -42,7 +46,7 @@ function parseEntry(raw: unknown): Entry | null {
   const { ref, label, type, start, end, cut, float, long } = raw;
   if (typeof ref !== 'string' || typeof label !== 'string' || !isBlockType(type) || !isTime(start)) return null;
   if (end !== undefined && (!isTime(end) || toMin(end) < toMin(start))) return null;
-  const e: Entry = { ref, label, type, start };
+  const e: Entry = { ref, label, type: legacyType(type, label), start };
   if (end !== undefined) e.end = end;
   if (cut === true) e.cut = true;
   if (float === true) e.float = true;
@@ -54,13 +58,21 @@ function merge(src: StoredData) {
   const { modes, ...rest } = src;
   Object.assign(data, emptyData(), rest);
 
+  // 每週範本：舊版的資料沒有，用預設範本；某一天格式不對，那一天退回預設
+  data.template = parseTemplate(src.template, DEFAULT_TEMPLATE);
+
+  // 舊版手動勾的起床（sleep）拿掉：起床改依起床時間判斷，不看勾選
+  if (isRecord(data.checks)) {
+    for (const day of Object.values(data.checks)) if (isRecord(day)) delete day.sleep;
+  }
+
   // 只留下格式正確、而且真的和原定時間表不同的調整紀錄，壞掉的那一天退回原定時間表。
   // 舊紀錄裡的自由時間、彈性時間與生活時段（吃飯、洗澡、休息）會在 parseBlocks 拿掉
   const schedules: AppData['schedules'] = {};
   if (isRecord(data.schedules)) {
     for (const [day, raw] of Object.entries(data.schedules)) {
       const parsed = parseBlocks(raw);
-      const original = baseBlocks(parseKey(day).getDay());
+      const original = blocksOf(data.template[parseKey(day).getDay()]);
       const blocks = parsed && adoptBaseIds(parsed, original);
       if (blocks && JSON.stringify(blocks) !== JSON.stringify(original)) schedules[day] = blocks;
     }

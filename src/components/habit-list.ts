@@ -1,28 +1,25 @@
 import { html, nothing, type TemplateResult } from 'lit-html';
-import { AUTO_HABITS, HABITS } from '../config/habits';
-import { refStatus, startedByHabit, wakeResult } from '../lib/log';
+import { HABITS } from '../config/habits';
+import { habitItems } from '../lib/log';
+import { checkMark } from './check';
 
 /**
- * 今日達標：只看當天的實際紀錄，不看計畫。今天按過開始的任務依習慣分組，
- * 例如「英文學習」「深度工作 ×2」，旁邊寫完成了幾個；沒開始的任務不列。
- * 「固定時間起床與睡覺」依起床時間自動判斷。課業整理沒有對應的任務，不在這裡列。
- * 不能手動勾選，本週累積在「本週」頁。完成的有「完成」或「達標」文字，不只靠顏色。
+ * 今日達標：只看當天的實際情形，不看計畫。每個習慣列出今天已經開始或能判斷的項目
+ * （按過開始的任務、時間到了的固定時段、有目標時間的浮動事項，見 log.ts 的 habitItems），
+ * 例如「英文學習」「深度工作 ×2」。全部完成打勾；沒完成的寫原因（例如起床晚了）、「進行中」或完成幾個。
+ * 課業整理沒有對應的任務，不在這裡列。不能手動勾選，本週累積在「本週」頁。
  */
 export function habitList(dk: string, now: Date): TemplateResult {
-  const started = startedByHabit(dk);
-  const wake = wakeResult(dk, now);
+  const byHabit = habitItems(dk, now);
   const items = HABITS.flatMap(h => {
-    if (h.id === 'sleep') {
-      if (!wake) return [];
-      const note = wake.ok ? '達標' : wake.at ? `${wake.at} 起床，目標 ${wake.target}` : `還沒起床，目標 ${wake.target}`;
-      return [{ id: h.id, name: h.name, status: note, done: wake.ok }];
-    }
-    const refs = AUTO_HABITS.has(h.id) ? started.get(h.id) : undefined;
-    if (!refs?.length) return [];
-    const done = refs.filter(r => refStatus(dk, r, now) === 'done').length;
-    const n = refs.length;
-    const status = n === 1 ? (done ? '完成' : '進行中') : `完成 ${done}/${n}`;
-    return [{ id: h.id, name: `${h.name}${n > 1 ? ` ×${n}` : ''}`, status, done: done === n }];
+    const list = byHabit.get(h.id);
+    if (!list?.length) return [];
+    const n = list.length;
+    const done = list.filter(i => i.done).length;
+    const note = list.find(i => !i.done && i.note)?.note;
+    const status: TemplateResult | string =
+      done === n ? checkMark() : note ?? (n === 1 ? '進行中' : html`<span class="sr-only">完成 </span>${done}/${n}`);
+    return [{ name: `${h.name}${n > 1 ? ` ×${n}` : ''}`, status, done: done === n }];
   });
   if (!items.length) return html`<p class="hint">今天還沒開始任何任務。按「現在」區塊的開始後，這裡會列出完成了哪些。</p>`;
   return html`<ul class="habits goals" role="list">${items.map(

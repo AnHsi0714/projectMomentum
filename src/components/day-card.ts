@@ -21,7 +21,7 @@ export function dayCard(d: Date): TemplateResult {
   const dk = dkey(d);
   const today = isToday(d);
   const blocks = blocksFor(dk, day);
-  // 起床：假日按過「起床」就寫實際時間，旁邊附上目標；平日是固定時段，寫原定時間
+  // 起床：按過「起床」就寫實際時間，旁邊附上目標；起床是固定時段的日子，寫原定時間
   const target = plannedWake(day);
   const woke = wokeAt(dk, floatsFor(day));
   const wake = woke ? html`${woke}${target && woke !== target ? html`<span class="fact-note">目標 ${target}</span>` : ''}` : target;
