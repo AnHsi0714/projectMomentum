@@ -7,7 +7,7 @@ import { checkMark } from './check';
  * 今日達標：只看當天的實際情形，不看計畫。每個習慣列出今天已經開始或能判斷的項目
  * （按過開始的任務、時間到了的固定時段、有目標時間的浮動事項，見 log.ts 的 habitItems），
  * 例如「英文學習」「深度工作 ×2」。全部完成打勾；沒完成的寫原因（例如起床晚了）、「進行中」或完成幾個。
- * 課業整理沒有對應的任務，不在這裡列。不能手動勾選，本週累積在「本週」頁。
+ * 不能手動勾選，本週累積在「本週」頁。
  */
 export function habitList(dk: string, now: Date): TemplateResult {
   const byHabit = habitItems(dk, now);

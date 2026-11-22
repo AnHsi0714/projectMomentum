@@ -33,7 +33,7 @@ export const DAY_THEME: Record<number, string> = {
   4: "運動與自主專案日",
   5: "自主專案與運動日",
   6: "自主專案與能力培養日",
-  0: "課業整理與每週回顧日",
+  0: "課業與每週回顧日",
 };
 
 const minutesOf = (start: string, end: string) => {
@@ -80,7 +80,7 @@ export const DEFAULT_TEMPLATE: WeekTemplate = {
     clock("08:00", "09:00", "通勤", "commute", "commute-go"),
     clock("09:00", "18:30", "上課", "class"),
     clock("18:30", "19:30", "通勤回家", "commute", "commute-back"),
-    press("21:00", "21:30", "輕量英文或課業整理", "english"),
+    press("21:00", "21:30", "輕量英文", "english"),
     press("21:30", "22:00", "閱讀", "reading"),
     BEDTIME,
     SHOWER,
@@ -127,7 +127,7 @@ export const DEFAULT_TEMPLATE: WeekTemplate = {
     press("12:00", "13:00", "英文", "english"),
     press("14:00", "15:30", "深度工作：文獻或 HCI", "deep", "deep-pm"),
     press("16:00", "16:40", "運動", "exercise"),
-    press("17:40", "18:10", "閱讀或課業整理", "reading"),
+    press("17:40", "18:10", "閱讀", "reading"),
     BEDTIME,
     WAKE_FLOAT,
     BRUNCH,

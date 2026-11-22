@@ -13,9 +13,6 @@ export const TYPE_HABIT: Partial<Record<BlockType, string>> = {
   wake: "sleep",
 };
 
-/** 有對應任務的習慣，會自動勾選；其餘的（課業整理）沒有任務對應 */
-export const AUTO_HABITS: ReadonlySet<string> = new Set(Object.values(TYPE_HABIT));
-
 /**
  * 任務對應到哪個習慣，看類型（TYPE_HABIT）。任務按結束時自動勾選這個習慣；
  * 「今天」頁的今日達標也依這個對應列出。沒有對應的回傳 null。
@@ -38,7 +35,6 @@ export const HABITS: Habit[] = [
   },
   { id: "workout", name: "運動", target: 3, detail: "" },
   { id: "project", name: "深度工作", target: 4, detail: "專案、課業、文獻、HCI 都算" },
-  { id: "school", name: "課業整理", target: 2, detail: "" },
   { id: "review", name: "每週回顧（週日）", target: 1, detail: "" },
 ];
 

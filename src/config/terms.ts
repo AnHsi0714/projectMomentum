@@ -54,11 +54,6 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
         type: "deep",
       },
       {
-        term: "課業整理",
-        meaning: "整理筆記、對照課表、處理零碎的課業事項，不需要長時間專心。",
-        type: null,
-      },
-      {
         term: "每週回顧與下週規劃",
         meaning: "回答「回顧」頁的問題，確認下週的課程、作業與考試，決定下週最重要的交付成果。",
         type: "plan",
@@ -169,7 +164,7 @@ export const PRIORITY: { name: string; note: string }[] = [
   { name: "吃飯與洗澡", note: "可以挪時間，不取消。" },
   { name: "當天最重要的一項任務", note: "通常是深度工作，週日是每週回顧。" },
   {
-    name: "英文、運動、閱讀、課業整理",
+    name: "英文、運動、閱讀",
     note: "其餘的習慣，縮短比取消好。",
   },
   { name: "輕量任務", note: "可以延到別天。" },

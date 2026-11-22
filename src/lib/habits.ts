@@ -7,7 +7,7 @@ import { dkey, toMin } from './time';
 
 /**
  * 某一天某個習慣是否完成：當天這個習慣有一項完成就算（規則見 log.ts 的 habitItems）。
- * checks 是任務按結束時寫入的，也留著舊版手動勾的課業整理。
+ * checks 是任務按結束時寫入的。
  */
 export function achieved(dk: string, habitId: string, now: Date): boolean {
   if (data.checks[dk]?.[habitId]) return true;
