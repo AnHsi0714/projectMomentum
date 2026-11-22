@@ -1376,6 +1376,15 @@ select {
   font-weight: 700;
 }
 
+// 次數與總時數：名稱下面一行小字，補充目標的天數
+.wh-amount {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
 .wh-days {
   grid-area: days;
   display: flex;
