@@ -1,6 +1,6 @@
 import { html, type TemplateResult } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
-import { adjustBar, adjustEntry, adjustHint, insertForm } from '../components/adjust';
+import { adjustBar, adjustEntry, adjustHint, applyForm, insertForm } from '../components/adjust';
 import { dayChips } from '../components/day-chips';
 import { dayStrip } from '../components/day-strip';
 import { habitList } from '../components/habit-list';
@@ -64,7 +64,7 @@ export function renderToday(): TemplateResult {
         ${draft ? dayStrip(draft) : ''}
         ${timeline(dk, blocks, now, draft)}
         ${pendingList(draft ? draft.pending : pendingFor(dk), !!draft)}
-        ${draft ? html`${insertForm(defaultStart, floats)}${adjustBar()}` : ''}
+        ${draft ? html`${insertForm(defaultStart, floats)}${applyForm()}${adjustBar()}` : ''}
       </section>
       <div class="stack">
         ${showRecover

@@ -4,7 +4,7 @@ import { DAY_NAMES } from './config/schedule';
 import { initStripDrag, isStripDragging } from './strip-drag';
 import { isBlockType, parseTimeInput, SLEEP_MIN, STEP_MIN } from './lib/blocks';
 import {
-  confirmDraft, draftConflicts, dropPending, insertRow, isDirty, moveRow, parkRow, removeRow, resetRows, resizeRow, restorePending,
+  applyPlan, confirmDraft, draftConflicts, dropPending, insertRow, isDirty, moveRow, parkRow, removeRow, resetRows, resizeRow, restorePending,
   setField, sortDraft, startDraft, toggleDone, toggleLock, type Draft, type Result,
 } from './lib/draft';
 import { endRunning, keepRunning, pauseRunning, remainingOf, running, startFloat, startTask } from './lib/log';
@@ -320,6 +320,20 @@ function handleAction(act: string, index?: number, k?: number) {
     // 排回後焦點到那個任務的名稱；刪除或排不回時留在暫待區，暫待區空了就到插入鈕
     if (r.ok && act === 'restore' && r.index !== undefined) focusField(r.index, 'label');
     else focusPending(act, k) || focusPending('restore', 0) || focusButton('insert');
+  } else if (act === 'apply-date') {
+    const input = main.querySelector<HTMLInputElement>('#apply-date')!;
+    const fail = (text: string) => {
+      setMessage('adjust-msg', text, true);
+      focusStill(input);
+    };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.value)) return fail('請先選要複製哪一天。');
+    if (input.value === d.date) return fail('選的是同一天，請選另一個日期。');
+    const src = parseKey(input.value);
+    applyPlan(d, blocksFor(input.value, src.getDay()), now);
+    render();
+    setMessage('adjust-msg', `已套用 ${fmtMD(src)}（週${DAY_NAMES[src.getDay()]}）的時間表，做過的保留。按確認後才會儲存。`);
+    announceConflicts();
+    focusStill(input);
   } else if (act === 'reset') {
     resetRows(d, sel.getDay(), now);
     render();

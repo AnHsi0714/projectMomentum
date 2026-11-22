@@ -60,6 +60,19 @@ export const insertForm = (defaultStart: string, floats: Float[]) => html`<field
     <div class="actions"><button type="button" class="btn" data-act="insert">插入</button></div>
   </fieldset>`;
 
+/**
+ * 套用其他日期的時間表：選一個日期，把那天的計畫帶進這一天的草稿，按確認後才儲存。
+ * 之後有自訂的範本時，也放在這裡讓這一天套用。
+ */
+export const applyForm = () => html`<fieldset class="insert-form">
+    <legend>套用其他日期</legend>
+    <p class="hint" id="apply-note">把那一天的時間表複製到這一天。這一天做過的保留，其他計畫換成那一天的，按確認後才會儲存。</p>
+    <div class="insert-fields">
+      <label class="field-label" for="apply-date">日期<input type="date" id="apply-date" aria-describedby="apply-note"></label>
+    </div>
+    <div class="actions"><button type="button" class="btn" data-act="apply-date">套用</button></div>
+  </fieldset>`;
+
 /** 調整中，貼在視窗底部的確認與取消。有衝突時確認照樣可以按，按下去會說明原因並帶到衝突清單 */
 export const adjustBar = () => html`<div class="adjust-bar" role="group" aria-label="儲存或取消調整">
     <p class="form-msg is-error" id="adjust-error" role="alert"></p>

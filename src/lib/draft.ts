@@ -329,6 +329,15 @@ export function resetRows(d: Draft, day: number, now: Date): void {
   d.problems = [];
 }
 
+/**
+ * 套用另一天的時間表：計畫換成那一天的計畫，做過的照實際紀錄保留，暫待區不動。
+ * id 照抄：同一個範本活動（例如 deep）在兩天的 id 相同，這一天已經做過的就不會再排一次
+ */
+export function applyPlan(d: Draft, plan: Block[], now: Date): void {
+  d.blocks = buildRows(d.date, plan, now);
+  d.problems = [];
+}
+
 export type ConfirmResult = { problems: Problem[] } | { conflicts: Conflict[] } | { merged: number };
 
 /**
