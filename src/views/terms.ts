@@ -1,6 +1,6 @@
 import { html, type TemplateResult } from 'lit-html';
 import { KIND_OF, TYPE_LABEL } from '../config/kinds';
-import { NAMING_RULES, PRIORITY, PRIORITY_NOTE, TERM_GROUPS, type Term } from '../config/terms';
+import { NAMING_RULES, PRIORITY, PRIORITY_NOTE, SLOT_KINDS, TERM_GROUPS, type Term } from '../config/terms';
 import { viewHead } from '../components/view-head';
 
 /** 名詞用和時間表一樣的螢光筆底色，類型另外寫成文字，顏色只是輔助 */
@@ -24,6 +24,13 @@ export function renderTerms(): TemplateResult {
           ${PRIORITY.map(p => html`<li><b>${p.name}</b>：${p.note}</li>`)}
         </ol>
         <p class="hint hint-after">${PRIORITY_NOTE}</p>
+      </section>
+      <section class="sec">
+        <h2>時段的種類</h2>
+        <p class="hint">每個時段是其中一種，決定要不要按開始、怎樣算完成。</p>
+        <dl class="term-list">${SLOT_KINDS.map(
+          k => html`<div class="term"><dt><span class="term-name">${k.term}</span></dt><dd>${k.meaning}</dd></div>`,
+        )}</dl>
       </section>
       <section class="sec">
         <h2>名詞解釋</h2>
