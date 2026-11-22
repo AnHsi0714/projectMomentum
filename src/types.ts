@@ -103,6 +103,8 @@ export interface Settings {
   template: WeekTemplate;
   /** 浮動事項的先後階段，依先後排好。設定檔裡沒有時用 config/schedule.ts 的 DEFAULT_STAGES */
   stages: Stage[];
+  /** 就寢時間 HH:MM，任何任務都不能排到這之後。設定檔裡沒有時用 DEFAULT_SLEEP_TIME */
+  sleep: string;
 }
 
 /** 紀錄，存在 data/momentum.json */

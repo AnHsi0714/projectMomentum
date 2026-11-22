@@ -1,5 +1,5 @@
 import type { Draft } from './lib/draft';
-import type { TemplateDraft } from './lib/template-draft';
+import type { SettingsDraft } from './lib/settings-draft';
 
 export type ViewId = 'today' | 'week' | 'review' | 'terms' | 'settings';
 
@@ -17,8 +17,8 @@ export const state: {
   recoverTouched: string | null;
   /** 設定頁正在編輯星期幾的範本（0=日） */
   setDay: number;
-  /** 設定頁那一天範本的草稿，按儲存才寫進設定檔。切換星期或離開設定頁時丟掉 */
-  tdraft: TemplateDraft | null;
+  /** 設定頁整份設定的草稿（每一天的活動與先後階段），按儲存才寫進設定檔。離開設定頁時丟掉 */
+  sdraft: SettingsDraft | null;
   /** 設定頁「複製」的來源星期，null 表示跟著上面選的那一天；複製到的星期 */
   copyFrom: number | null;
   copyTo: number[];
@@ -28,7 +28,7 @@ export const state: {
   draft: null,
   recoverTouched: null,
   setDay: new Date().getDay(),
-  tdraft: null,
+  sdraft: null,
   copyFrom: null,
   copyTo: [],
 };

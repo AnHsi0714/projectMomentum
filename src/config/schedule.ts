@@ -10,8 +10,19 @@ import type { Activity, BlockType, Mode, Stage, WeekTemplate } from "../types";
 //   float 浮動事項：吃飯、洗澡、假日起床，不排在時間條上，按「開始」才開始，並暫停正在做的任務。
 // 活動之間沒排東西的時間就是「空白」（自由時間、彈性時間），畫面上寫成休息，不另外列。
 
-/** 每天的就寢時間，任何任務都不能排到這之後 */
-export const SLEEP_TIME = "23:30";
+/** 預設的就寢時間。實際的在設定檔（settings.json 的 sleep），在「設定」頁修改 */
+export const DEFAULT_SLEEP_TIME = "23:30";
+
+/**
+ * 每天的就寢時間，任何任務都不能排到這之後。讀進設定檔時由 lib/blocks.ts 的 applySleepTime 更新；
+ * 用 let 匯出，其他檔案拿到的永遠是最新的值
+ */
+export let SLEEP_TIME = DEFAULT_SLEEP_TIME;
+
+/** 只給 lib/blocks.ts 的 applySleepTime 用，同時更新分鐘數 */
+export function setSleepTime(t: string): void {
+  SLEEP_TIME = t;
+}
 
 export const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
 

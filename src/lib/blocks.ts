@@ -1,5 +1,5 @@
 import { TYPE_LABEL } from '../config/kinds';
-import { DEFAULT_STAGES, SLEEP_TIME } from '../config/schedule';
+import { DEFAULT_STAGES, setSleepTime, SLEEP_TIME } from '../config/schedule';
 import type { Activity, Block, BlockType, Float, Stage, WeekTemplate } from '../types';
 import { fmtTime, toMin } from './time';
 
@@ -12,7 +12,20 @@ import { fmtTime, toMin } from './time';
 // 調整時任務可以暫時重疊，沒有衝突才能儲存。
 
 /** 就寢時間的分鐘數，任何任務都不能排到這之後；時間本身在 config/schedule.ts 的 SLEEP_TIME */
-export const SLEEP_MIN = toMin(SLEEP_TIME);
+export let SLEEP_MIN = toMin(SLEEP_TIME);
+
+/** 就寢時間可以設的範圍：18:00 到 23:55（一天在午夜結束，還不支援過午夜才睡） */
+export const SLEEP_RANGE: [string, string] = ['18:00', '23:55'];
+
+/** 就寢時間格式正確、在範圍內 */
+export const isSleepTime = (v: unknown): v is string =>
+  isTime(v) && toMin(v) >= toMin(SLEEP_RANGE[0]) && toMin(v) <= toMin(SLEEP_RANGE[1]);
+
+/** 換就寢時間（讀設定檔或儲存設定時），SLEEP_TIME 與 SLEEP_MIN 一起更新 */
+export function applySleepTime(t: string): void {
+  setSleepTime(t);
+  SLEEP_MIN = toMin(t);
+}
 
 /** 拖動時間條時一格 5 分鐘，每個任務也至少這麼長 */
 export const STEP_MIN = 5;

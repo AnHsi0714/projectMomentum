@@ -1688,8 +1688,21 @@ select {
   }
 }
 
+// 星期按鈕：和時間條一起貼在頂端，按鈕縮小一點才不會佔太多高度。點是「有未儲存的變更」
 .set-days {
-  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+
+  .btn {
+    min-height: 2.75rem;
+    padding-inline: 0.625rem;
+  }
+}
+
+.dirty-dot {
+  margin-left: 0.125rem;
+  font-weight: 700;
 }
 
 .set-copy {
@@ -1724,9 +1737,8 @@ select {
   }
 }
 
-// 設定頁的時間條：可以拖，固定時段也能拖（範本就是在決定它的時間），只用虛線框標出是固定。
-// 往下改清單時貼在視窗頂端（只在活動那一節裡），底色與頁面相同才不會透出下面的內容
-.set-strip {
+// 星期與時間條：往下改清單時貼在視窗頂端（只在活動那一節裡），底色與頁面相同才不會透出下面的內容
+.set-sticky {
   position: sticky;
   top: 0;
   z-index: 3;
@@ -1734,6 +1746,11 @@ select {
   padding-block: 0.5rem;
   border-bottom: 2px solid var(--text);
   background: var(--bg);
+}
+
+// 設定頁的時間條：可以拖，固定時段也能拖（範本就是在決定它的時間），只用虛線框標出是固定
+.set-strip {
+  margin-top: 0.5rem;
 
   .seg.is-fixed:not(.is-clash) {
     border-style: dashed;
@@ -1748,5 +1765,36 @@ select {
 
 // 用 Tab 移到清單裡的欄位時，捲動會讓出貼在頂端的時間條的高度，欄位才不會被蓋住
 .act-list :is(input, select, button) {
-  scroll-margin-top: 11rem;
+  scroll-margin-top: 14rem;
+  scroll-margin-bottom: 10rem;
+}
+
+// 儲存列：整頁共用一個，寫出還有哪些沒儲存，操作訊息也寫在這裡
+.set-status {
+  margin-top: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+
+  &.is-dirty {
+    color: var(--text);
+    font-weight: 700;
+  }
+}
+
+// 畫面矮（手機橫放、放大到 200%）時，頂端的星期與時間條和底部的儲存列都不固定，
+// 中間才有空間操作，焦點移到的欄位也不會被蓋住
+@media (max-height: 40rem) {
+  .set-sticky,
+  .set-page .set-bar {
+    position: static;
+  }
+
+  .act-list :is(input, select, button) {
+    scroll-margin-top: 0;
+    scroll-margin-bottom: 0;
+  }
+}
+
+.set-sleep {
+  max-width: 14rem;
 }

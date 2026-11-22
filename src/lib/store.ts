@@ -1,6 +1,8 @@
-import { DEFAULT_STAGES, DEFAULT_TEMPLATE } from '../config/schedule';
+import { DEFAULT_SLEEP_TIME, DEFAULT_STAGES, DEFAULT_TEMPLATE } from '../config/schedule';
 import type { AppData, Block, Entry, Settings } from '../types';
-import { blocksOf, isBlockType, isTime, legacyType, parseBlocks, parsePending, parseStages, parseTemplate } from './blocks';
+import {
+  applySleepTime, blocksOf, isBlockType, isSleepTime, isTime, legacyType, parseBlocks, parsePending, parseStages, parseTemplate,
+} from './blocks';
 import { parseKey, toMin } from './time';
 
 // 紀錄（AppData）存在 data/momentum.json，設定（Settings）存在 data/settings.json，
@@ -17,6 +19,7 @@ export const data: AppData = emptyData();
 export const settings: Settings = {
   template: parseTemplate(DEFAULT_TEMPLATE, DEFAULT_TEMPLATE),
   stages: parseStages(DEFAULT_STAGES, DEFAULT_STAGES),
+  sleep: DEFAULT_SLEEP_TIME,
 };
 
 /** 兩個檔案：存檔時只寫有變動的那個 */
@@ -36,7 +39,7 @@ const setStatus = (s: SaveStatus) => { status = s; onStatus(s); };
  * 舊版的資料多一個 modes（每天選正常、調整、恢復），讀進來時轉成新格式。
  * 更早的版本把每週範本（template）也放在紀錄裡，讀進來時搬到設定。
  */
-type StoredData = Partial<AppData> & { modes?: unknown; template?: unknown; stages?: unknown };
+type StoredData = Partial<AppData> & { modes?: unknown; template?: unknown; stages?: unknown; sleep?: unknown };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -74,6 +77,9 @@ function parseEntry(raw: unknown): Entry | null {
  * 先後階段沒有或格式不對，用預設的階段
  */
 function mergeSettings(src: Partial<Record<keyof Settings, unknown>>) {
+  // 就寢時間要先讀：範本裡的活動要在就寢前結束
+  settings.sleep = isSleepTime(src.sleep) ? src.sleep : DEFAULT_SLEEP_TIME;
+  applySleepTime(settings.sleep);
   settings.template = parseTemplate(src.template, DEFAULT_TEMPLATE);
   settings.stages = parseStages(src.stages, DEFAULT_STAGES);
 }
@@ -84,6 +90,7 @@ function merge(src: StoredData) {
   // 範本與階段在設定裡，由 mergeSettings 讀
   delete rest.template;
   delete rest.stages;
+  delete rest.sleep;
   Object.assign(data, emptyData(), rest);
 
   // 舊版手動勾的起床（sleep）拿掉：起床改依起床時間判斷，不看勾選
@@ -244,8 +251,8 @@ export async function importJson(file: File): Promise<void> {
   if (!isRecord(parsed)) throw new Error('備份檔格式不正確');
   const src = parsed as StoredData;
   // 舊備份沒有的設定項目不動目前的設定
-  if (src.template !== undefined || src.stages !== undefined) {
-    mergeSettings({ template: src.template ?? settings.template, stages: src.stages ?? settings.stages });
+  if (src.template !== undefined || src.stages !== undefined || src.sleep !== undefined) {
+    mergeSettings({ template: src.template ?? settings.template, stages: src.stages ?? settings.stages, sleep: src.sleep ?? settings.sleep });
     save('settings');
   }
   merge(src);

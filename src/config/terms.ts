@@ -1,4 +1,3 @@
-import { SLEEP_TIME } from "./schedule";
 import type { BlockType } from "../types";
 
 // 「名詞」頁的內容。時段名稱以這裡為準，新增或改名時段時先看有沒有現成的名詞。
@@ -24,7 +23,7 @@ export const SLOT_KINDS: { term: string; meaning: string }[] = [
   },
   {
     term: "任務",
-    meaning: "深度工作、英文、運動、閱讀、每週回顧。按「開始」才開始，按「結束」才結束，按了結束才算完成。",
+    meaning: "深度工作、英文、運動、閱讀、每週回顧。按「開始」才開始，按「結束」才結束，按了結束才算完成；被打斷時已經做滿預定時間也算完成。",
   },
   {
     term: "浮動事項",
@@ -145,7 +144,7 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
       { term: "洗澡、整理", meaning: "回家或運動後洗澡、收拾。", type: "prep" },
       {
         term: "睡前準備",
-        meaning: `${SLEEP_TIME} 就寢前的準備，不再開始新任務。`,
+        meaning: "就寢前的準備，不再開始新任務。",
         type: "prep",
       },
       { term: "晚餐", meaning: "時間浮動，不要求固定開始。", type: "meal" },
@@ -165,7 +164,7 @@ export const TERM_GROUPS: { title: string; note?: string; items: Term[] }[] = [
 
 /** 時間不夠時的取捨順序：越前面越要保住，越後面越先縮短或取消 */
 export const PRIORITY: { name: string; note: string }[] = [
-  { name: "睡眠", note: `${SLEEP_TIME} 就寢與睡前準備，不延後睡眠來補進度。` },
+  { name: "睡眠", note: "準時就寢與睡前準備，不延後睡眠來補進度。" },
   { name: "上課與通勤", note: "固定行程，不在這裡調整。" },
   { name: "吃飯與洗澡", note: "可以挪時間，不取消。" },
   { name: "當天最重要的一項任務", note: "通常是深度工作，週日是每週回顧。" },
