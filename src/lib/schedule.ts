@@ -1,16 +1,16 @@
 import type { Activity, Block, BlockType, Float } from '../types';
 import { blocksOf, floatsOf, sortBlocks, wakeOf } from './blocks';
-import { data, save } from './store';
+import { data, save, settings } from './store';
 import { elapsedMinutes, parseKey, toMin } from './time';
 
 /** 星期 day 在每週範本裡的活動 */
-export const templateFor = (day: number): Activity[] => data.template[day] ?? [];
+export const templateFor = (day: number): Activity[] => settings.template[day] ?? [];
 
 /** 星期 day 原定的時間表（固定與任務），由每週範本產生 */
 export const baseBlocks = (day: number): Block[] => blocksOf(templateFor(day));
 
 /** 星期 day 的浮動事項（起床、洗澡、吃飯），順序就是按鈕的順序 */
-export const floatsFor = (day: number): Float[] => floatsOf(templateFor(day));
+export const floatsFor = (day: number): Float[] => floatsOf(templateFor(day), settings.stages);
 
 /** 星期 day 的起床設定（範本裡類型是起床的活動） */
 export const wakeFor = (day: number): Activity | undefined => wakeOf(templateFor(day));

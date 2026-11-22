@@ -13,7 +13,7 @@ export type Mode = 'clock' | 'press' | 'float';
 /**
  * 每週範本裡的一個活動。id 建立後不變，實際紀錄（Entry）的 ref 指向它，同一天裡不重複。
  * start 是 HH:MM（24 小時制），clock、press 一定有；float 可以沒有。
- * stage 只有 float 用：先後階段（起床 0，早午餐 1，洗澡與晚餐 2）。
+ * stage 只有 float 用：先後階段的 id（見 Settings 的 stages）。
  */
 export interface Activity {
   id: string;
@@ -22,7 +22,17 @@ export interface Activity {
   mode: Mode;
   start?: string;
   minutes: number;
-  stage?: number;
+  stage?: string;
+}
+
+/**
+ * 浮動事項的先後階段。順序就是在清單裡的位置（畫面上寫 1 到 n）：
+ * 做了後面階段的事，前面階段的就不再列出；第 1 階段在當天開始做任何事之後就不再列出（例如起床）。
+ * id 建立後不變，活動的 stage 指向它，所以調整順序不用改活動。
+ */
+export interface Stage {
+  id: string;
+  label: string;
 }
 
 /** 每週範本：星期（0=日 1=一 ... 6=六）對應那一天的活動 */
@@ -47,7 +57,7 @@ export interface Block {
 /**
  * 浮動事項：吃飯、洗澡、浮動的起床這類長度大致固定、但不知道什麼時候開始的事。
  * 不排在時間表上，按「開始」才開始，並暫停正在做的任務。minutes 是大概的長度，
- * stage 是先後階段（起床 0，早午餐 1，洗澡與晚餐 2）。由每週範本裡 mode 是 float 的活動產生。
+ * stage 是先後階段的順序（從 0 開始，0 是第 1 階段）。由每週範本裡 mode 是 float 的活動產生。
  * start 是目標時間（例如起床 08:30）：有的話，比目標晚 30 分鐘以內開始才算完成。
  */
 export interface Float {
@@ -84,9 +94,19 @@ export interface Habit {
   detail: string;
 }
 
-export interface AppData {
-  /** 每週範本：每天原定的活動。資料裡沒有時用 config/schedule.ts 的 DEFAULT_TEMPLATE */
+/**
+ * 設定，存在 data/settings.json，和紀錄（AppData）分開。在「設定」頁修改。
+ * 之後就寢時間、習慣這些寫在程式裡的設定也會搬到這裡。
+ */
+export interface Settings {
+  /** 每週範本：每天原定的活動。設定檔裡沒有時用 config/schedule.ts 的 DEFAULT_TEMPLATE */
   template: WeekTemplate;
+  /** 浮動事項的先後階段，依先後排好。設定檔裡沒有時用 config/schedule.ts 的 DEFAULT_STAGES */
+  stages: Stage[];
+}
+
+/** 紀錄，存在 data/momentum.json */
+export interface AppData {
   /** checks[日期][習慣id] = 是否完成。任務按結束、當天這類任務都完成時自動勾選，也能手動改 */
   checks: Record<string, Record<string, boolean>>;
   /** 當天調整過的時間表，key 是日期。沒有這一天的紀錄就用每週範本產生的原定時間表 */

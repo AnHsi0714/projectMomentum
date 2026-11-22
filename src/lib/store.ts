@@ -1,27 +1,42 @@
-import { DEFAULT_TEMPLATE } from '../config/schedule';
-import type { AppData, Block, Entry } from '../types';
-import { blocksOf, isBlockType, isTime, legacyType, parseBlocks, parsePending, parseTemplate } from './blocks';
+import { DEFAULT_STAGES, DEFAULT_TEMPLATE } from '../config/schedule';
+import type { AppData, Block, Entry, Settings } from '../types';
+import { blocksOf, isBlockType, isTime, legacyType, parseBlocks, parsePending, parseStages, parseTemplate } from './blocks';
 import { parseKey, toMin } from './time';
 
-const LS_KEY = 'momentum.v1';
-const API = '/api/data';
+// 紀錄（AppData）存在 data/momentum.json，設定（Settings）存在 data/settings.json，
+// 分別由開發伺服器的 /api/data 與 /api/settings 讀寫；瀏覽器也各留一份暫存。
 
 export type SaveStatus = 'file' | 'local' | 'saving' | 'error';
 
 const emptyData = (): AppData => ({
-  template: parseTemplate(DEFAULT_TEMPLATE, DEFAULT_TEMPLATE),
   checks: {}, schedules: {}, pending: {}, log: {}, confirmed: {}, recover: {}, notes: {}, reviews: {},
 });
 
 export const data: AppData = emptyData();
+
+export const settings: Settings = {
+  template: parseTemplate(DEFAULT_TEMPLATE, DEFAULT_TEMPLATE),
+  stages: parseStages(DEFAULT_STAGES, DEFAULT_STAGES),
+};
+
+/** 兩個檔案：存檔時只寫有變動的那個 */
+type Store = 'data' | 'settings';
+const STORES: Record<Store, { api: string; ls: string; value: () => unknown }> = {
+  data: { api: '/api/data', ls: 'momentum.v1', value: () => data },
+  settings: { api: '/api/settings', ls: 'momentum.settings.v1', value: () => settings },
+};
+const dirty = new Set<Store>();
 
 let status: SaveStatus = 'local';
 let onStatus: (s: SaveStatus) => void = () => {};
 export const setStatusListener = (fn: (s: SaveStatus) => void) => { onStatus = fn; };
 const setStatus = (s: SaveStatus) => { status = s; onStatus(s); };
 
-/** 舊版的資料多一個 modes（每天選正常、調整、恢復），讀進來時轉成新格式 */
-type StoredData = Partial<AppData> & { modes?: unknown };
+/**
+ * 舊版的資料多一個 modes（每天選正常、調整、恢復），讀進來時轉成新格式。
+ * 更早的版本把每週範本（template）也放在紀錄裡，讀進來時搬到設定。
+ */
+type StoredData = Partial<AppData> & { modes?: unknown; template?: unknown; stages?: unknown };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -54,12 +69,22 @@ function parseEntry(raw: unknown): Entry | null {
   return e;
 }
 
+/**
+ * 讀取設定。每週範本沒有時用預設範本，某一天格式不對，那一天退回預設；
+ * 先後階段沒有或格式不對，用預設的階段
+ */
+function mergeSettings(src: Partial<Record<keyof Settings, unknown>>) {
+  settings.template = parseTemplate(src.template, DEFAULT_TEMPLATE);
+  settings.stages = parseStages(src.stages, DEFAULT_STAGES);
+}
+
+/** 讀取紀錄。要先讀設定：調整過的時間表要和每週範本比對 */
 function merge(src: StoredData) {
   const { modes, ...rest } = src;
+  // 範本與階段在設定裡，由 mergeSettings 讀
+  delete rest.template;
+  delete rest.stages;
   Object.assign(data, emptyData(), rest);
-
-  // 每週範本：舊版的資料沒有，用預設範本；某一天格式不對，那一天退回預設
-  data.template = parseTemplate(src.template, DEFAULT_TEMPLATE);
 
   // 舊版手動勾的起床（sleep）拿掉：起床改依起床時間判斷，不看勾選
   if (isRecord(data.checks)) {
@@ -72,7 +97,7 @@ function merge(src: StoredData) {
   if (isRecord(data.schedules)) {
     for (const [day, raw] of Object.entries(data.schedules)) {
       const parsed = parseBlocks(raw);
-      const original = blocksOf(data.template[parseKey(day).getDay()]);
+      const original = blocksOf(settings.template[parseKey(day).getDay()]);
       const blocks = parsed && adoptBaseIds(parsed, original);
       if (blocks && JSON.stringify(blocks) !== JSON.stringify(original)) schedules[day] = blocks;
     }
@@ -121,51 +146,92 @@ function merge(src: StoredData) {
   data.recover = recover;
 }
 
-const isEmpty = (d: StoredData) =>
+const isEmpty = (d: object) =>
   !d || Object.values(d).every(v => !v || Object.keys(v).length === 0);
 
-/** 啟動時載入：優先讀資料夾裡的檔案；沒有伺服器時退回瀏覽器暫存 */
-export async function load(): Promise<void> {
-  let local: StoredData = {};
-  try { local = JSON.parse(localStorage.getItem(LS_KEY) ?? '{}'); } catch { /* ignore */ }
+const readLocal = (key: string): Record<string, unknown> => {
   try {
-    const res = await fetch(API);
-    if (!res.ok) throw new Error(String(res.status));
-    const file = (await res.json()) as StoredData;
-    const migrate = isEmpty(file) && !isEmpty(local); // 檔案是空的但瀏覽器有舊資料 → 遷移到檔案
-    merge(migrate ? local : file);
-    setStatus('file');
-    if (migrate) await flush();
+    const v: unknown = JSON.parse(localStorage.getItem(key) ?? '{}');
+    return isRecord(v) ? v : {};
   } catch {
-    merge(local);
+    return {};
+  }
+};
+
+async function fetchJson(api: string): Promise<Record<string, unknown>> {
+  const res = await fetch(api);
+  if (!res.ok) throw new Error(String(res.status));
+  const v: unknown = await res.json();
+  return isRecord(v) ? v : {};
+}
+
+/**
+ * 啟動時載入：優先讀資料夾裡的檔案；沒有伺服器時退回瀏覽器暫存。
+ * 紀錄檔是空的但瀏覽器有舊資料，遷移到檔案；設定檔沒有範本但紀錄裡有（舊版），搬到設定檔。
+ */
+export async function load(): Promise<void> {
+  const local = readLocal(STORES.data.ls);
+  const localSettings = readLocal(STORES.settings.ls);
+  try {
+    const [file, fileSettings] = await Promise.all([fetchJson(STORES.data.api), fetchJson(STORES.settings.api)]);
+    const migrate = isEmpty(file) && !isEmpty(local);
+    const src = (migrate ? local : file) as StoredData;
+    const moveTemplate = fileSettings.template === undefined && src.template !== undefined;
+    mergeSettings(moveTemplate ? { template: src.template } : fileSettings);
+    merge(src);
+    setStatus('file');
+    if (migrate || moveTemplate) {
+      dirty.add('data');
+      dirty.add('settings');
+      await flush();
+    }
+  } catch {
+    const src = local as StoredData;
+    mergeSettings(localSettings.template !== undefined ? localSettings : { template: src.template });
+    merge(src);
     setStatus('local');
   }
 }
 
+function saveLocal(which: Store): string {
+  const body = JSON.stringify(STORES[which].value(), null, 2);
+  try { localStorage.setItem(STORES[which].ls, body); } catch { /* ignore */ }
+  return body;
+}
+
 async function flush(): Promise<void> {
-  const body = JSON.stringify(data, null, 2);
-  try { localStorage.setItem(LS_KEY, body); } catch { /* ignore */ }
+  const todo = [...dirty];
+  dirty.clear();
+  const bodies = todo.map(w => [w, saveLocal(w)] as const);
   if (status === 'local') return; // 沒有伺服器，只存瀏覽器
   try {
-    const res = await fetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
-    if (!res.ok) throw new Error(String(res.status));
+    for (const [w, body] of bodies) {
+      const res = await fetch(STORES[w].api, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
+      if (!res.ok) throw new Error(String(res.status));
+    }
     setStatus('file');
   } catch {
+    todo.forEach(w => dirty.add(w)); // 下一次存檔再試
     setStatus('error');
   }
 }
 
 let timer: number | undefined;
-/** 變更後呼叫；稍微延遲合併多次輸入 */
-export function save(): void {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch { /* ignore */ }
+/** 紀錄變更後呼叫；稍微延遲合併多次輸入 */
+export function save(which: Store = 'data'): void {
+  dirty.add(which);
+  saveLocal(which);
   if (status !== 'local') setStatus('saving');
   clearTimeout(timer);
   timer = window.setTimeout(flush, 400);
 }
 
+/** 設定變更後呼叫 */
+export const saveSettings = (): void => save('settings');
+
+/** 備份檔是一個 JSON：紀錄加上設定（每週範本 template、先後階段 stages），匯入時設定搬回設定檔 */
 export function exportJson(): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ ...data, ...settings }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `momentum-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -175,9 +241,13 @@ export function exportJson(): void {
 
 export async function importJson(file: File): Promise<void> {
   const parsed: unknown = JSON.parse(await file.text());
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error('備份檔格式不正確');
+  if (!isRecord(parsed)) throw new Error('備份檔格式不正確');
+  const src = parsed as StoredData;
+  // 舊備份沒有的設定項目不動目前的設定
+  if (src.template !== undefined || src.stages !== undefined) {
+    mergeSettings({ template: src.template ?? settings.template, stages: src.stages ?? settings.stages });
+    save('settings');
   }
-  merge(parsed as StoredData);
-  save();
+  merge(src);
+  save('data');
 }

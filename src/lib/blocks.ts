@@ -1,6 +1,6 @@
 import { TYPE_LABEL } from '../config/kinds';
-import { SLEEP_TIME } from '../config/schedule';
-import type { Activity, Block, BlockType, Float, WeekTemplate } from '../types';
+import { DEFAULT_STAGES, SLEEP_TIME } from '../config/schedule';
+import type { Activity, Block, BlockType, Float, Stage, WeekTemplate } from '../types';
 import { fmtTime, toMin } from './time';
 
 // 這個檔案只放時段的純運算（驗證、分類、拖動、衝突），不碰儲存，方便單獨測試。
@@ -58,11 +58,15 @@ export const blocksOf = (acts: Activity[]): Block[] =>
     ),
   );
 
-/** 範本裡的浮動事項，順序照範本（就是按鈕的順序）。有開始時間的是目標時間 */
-export const floatsOf = (acts: Activity[]): Float[] =>
+/**
+ * 範本裡的浮動事項，順序照範本（就是按鈕的順序）。有開始時間的是目標時間。
+ * 階段換成在 stages 裡的位置；找不到的階段當成最後一個，整天都會列出
+ */
+export const floatsOf = (acts: Activity[], stages: Stage[]): Float[] =>
   acts.flatMap(a => {
     if (a.mode !== 'float') return [];
-    const f: Float = { id: a.id, label: a.label, type: a.type, minutes: a.minutes, stage: a.stage ?? 0 };
+    const at = stages.findIndex(s => s.id === a.stage);
+    const f: Float = { id: a.id, label: a.label, type: a.type, minutes: a.minutes, stage: at >= 0 ? at : stages.length - 1 };
     if (a.start) f.start = a.start;
     return [f];
   });
@@ -83,11 +87,30 @@ function parseActivity(raw: unknown): Activity | null {
   if (!MODES.has(mode) || typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < STEP_MIN) return null;
   if (start !== undefined && !isTime(start)) return null;
   if (mode !== 'float' && (start === undefined || toMin(start) + minutes > SLEEP_MIN)) return null;
-  if (stage !== undefined && (typeof stage !== 'number' || !Number.isInteger(stage) || stage < 0)) return null;
+  const stageId = legacyStage(stage);
+  if (stageId === null) return null;
   const a: Activity = { id, label, type, mode: mode as Activity['mode'], minutes };
   if (start !== undefined) a.start = start;
-  if (stage !== undefined) a.stage = stage;
+  if (stageId !== undefined && mode === 'float') a.stage = stageId;
   return a;
+}
+
+/** 階段是 id；舊版存的是數字 0、1、2，換成預設階段的 id。格式不對回傳 null */
+function legacyStage(stage: unknown): string | undefined | null {
+  if (stage === undefined || (typeof stage === 'string' && stage)) return stage;
+  if (typeof stage === 'number' && Number.isInteger(stage) && stage >= 0) return (DEFAULT_STAGES[stage] ?? DEFAULT_STAGES.at(-1)!).id;
+  return null;
+}
+
+/** 讀取先後階段：每個要有 id 與名稱，id 不重複；格式不對或一個都沒有，用 fallback */
+export function parseStages(raw: unknown, fallback: Stage[]): Stage[] {
+  const list = Array.isArray(raw)
+    ? raw.map(s => (isRecord(s) && typeof s.id === 'string' && s.id && typeof s.label === 'string' && s.label.trim()
+        ? { id: s.id, label: s.label.trim() }
+        : null))
+    : [];
+  const ok = list.length > 0 && list.every(s => s !== null) && new Set(list.map(s => s!.id)).size === list.length;
+  return ok ? (list as Stage[]) : fallback.map(s => ({ ...s }));
 }
 
 /**

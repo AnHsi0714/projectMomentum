@@ -3,3 +3,4 @@ dist
 data/*.tmp
 # 個人紀錄，不要提交到公開的儲存庫
 data/momentum.json
+data/settings.json

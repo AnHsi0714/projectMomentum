@@ -1,8 +1,9 @@
-import type { Activity, BlockType, Mode, WeekTemplate } from "../types";
+import type { Activity, BlockType, Mode, Stage, WeekTemplate } from "../types";
 
 // 星期：0=日 1=一 ... 6=六
 // 時段名稱的用詞與先後順序見 src/config/terms.ts（網頁的「名詞」頁）
-// 每天的活動存在資料檔的 template（每週範本），這裡只是資料檔還沒有範本時的預設值。
+// 每天的活動存在設定檔 data/settings.json 的 template（每週範本），在「設定」頁修改。
+// 這裡只是設定檔還沒有範本時的預設值，也是「還原成預設」用的內容。
 // 活動依 mode 分三種（見 types.ts 的 Mode）：
 //   clock 固定：時間條上的固定時段（上課、通勤、睡前準備、平日起床），照時鐘自動開始與結束，不用按。
 //   press 任務：時間條上的任務，按「開始」才開始、按「結束」才結束。
@@ -43,12 +44,19 @@ const timed =
 const clock = timed("clock");
 const press = timed("press");
 
+/** 預設的浮動事項先後階段，依先後排好。也用來把舊資料的階段數字（0、1、2）換成 id */
+export const DEFAULT_STAGES: Stage[] = [
+  { id: "wake", label: "起床" },
+  { id: "brunch", label: "早午餐" },
+  { id: "evening", label: "洗澡與晚餐" },
+];
+
 const WAKE_LABEL = "起床、盥洗、準備";
 const wakeAt = (start: string, end: string) => clock(start, end, WAKE_LABEL, "wake");
-const WAKE_FLOAT: Activity = { id: "wake", label: WAKE_LABEL, type: "wake", mode: "float", start: "08:30", minutes: 30, stage: 0 };
-const BRUNCH: Activity = { id: "brunch", label: "早午餐", type: "meal", mode: "float", minutes: 60, stage: 1 };
-const SHOWER: Activity = { id: "shower", label: "洗澡、整理", type: "prep", mode: "float", minutes: 50, stage: 2 };
-const DINNER: Activity = { id: "dinner", label: "晚餐", type: "meal", mode: "float", minutes: 70, stage: 2 };
+const WAKE_FLOAT: Activity = { id: "wake", label: WAKE_LABEL, type: "wake", mode: "float", start: "08:30", minutes: 30, stage: "wake" };
+const BRUNCH: Activity = { id: "brunch", label: "早午餐", type: "meal", mode: "float", minutes: 60, stage: "brunch" };
+const SHOWER: Activity = { id: "shower", label: "洗澡、整理", type: "prep", mode: "float", minutes: 50, stage: "evening" };
+const DINNER: Activity = { id: "dinner", label: "晚餐", type: "meal", mode: "float", minutes: 70, stage: "evening" };
 const BEDTIME = clock("23:00", "23:30", "睡前準備", "prep", "bedtime");
 
 /**

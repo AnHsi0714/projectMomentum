@@ -29,7 +29,7 @@ export function renderReview(): TemplateResult {
       </section>
       <section class="sec">
         <h2>備份</h2>
-        <p class="hint">資料主檔在專案的 data/momentum.json。也可以另外匯出一份，或從備份檔還原。</p>
+        <p class="hint">資料在專案的 data 資料夾：紀錄在 momentum.json，設定（每週範本）在 settings.json。也可以另外匯出一份，或從備份檔還原，備份檔包含兩者。</p>
         <div class="actions">
           <button type="button" class="btn" id="btn-export">匯出 JSON</button>
           <button type="button" class="btn" id="btn-import">匯入 JSON</button>
