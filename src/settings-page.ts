@@ -1,7 +1,11 @@
 import { DAY_NAMES, DEFAULT_TEMPLATE } from './config/schedule';
+import { parseTimeInput } from './lib/blocks';
 import { saveSettings, settings } from './lib/store';
 import { addStage, moveStage, stageUsers } from './lib/stages';
-import { addRow, commitTemplateDraft, isTemplateDirty, removeRow, replaceRows, setRow, type ActRow } from './lib/template-draft';
+import {
+  addRow, commitTemplateDraft, isTemplateDirty, moveTemplateRow, removeRow, replaceRows, resizeTemplateRow, setRow, sortRows, spanOf, stripRows, type ActRow,
+} from './lib/template-draft';
+import { fmtTime } from './lib/time';
 import { currentRoute, state } from './state';
 import { currentTemplateDraft } from './views/settings';
 
@@ -26,9 +30,6 @@ export function leaveTemplateDraft(): boolean {
 
 export const hasTemplateChanges = (): boolean => !!state.tdraft && isTemplateDirty(state.tdraft);
 
-/** 改了就要重畫的欄位：種類決定有沒有先後階段、開始欄位的名稱 */
-const RERENDER: ReadonlySet<string> = new Set(['mode']);
-
 export function initSettingsPage(main: HTMLElement, { render, setMessage, focusStill }: PageTools): void {
   const focusId = (id: string) => {
     const el = main.querySelector<HTMLElement>(`#${id}`);
@@ -42,11 +43,17 @@ export function initSettingsPage(main: HTMLElement, { render, setMessage, focusS
     const dayBtn = t.closest<HTMLElement>('[data-set-day]');
     const act = t.closest<HTMLElement>('[data-set-act]');
     const stageAct = t.closest<HTMLElement>('[data-stage-act]');
+    const seg = t.closest<HTMLElement>('.set-strip [data-seg]');
+    if (seg) {
+      const at = rowAt(Number(seg.dataset.seg));
+      return at === undefined ? undefined : gotoRow(at);
+    }
     if (stageAct) return handleStage(stageAct.dataset.stageAct!, Number(stageAct.dataset.k));
     if (dayBtn) {
       const day = Number(dayBtn.dataset.setDay);
       if (day === state.setDay || !leaveTemplateDraft()) return;
       state.setDay = day;
+      state.copyFrom = null;
       render();
       focusId('set-day-title') || focusStill(dayBtn);
       return;
@@ -101,27 +108,33 @@ export function initSettingsPage(main: HTMLElement, { render, setMessage, focusS
         break;
       }
       case 'copy': {
-        if (isTemplateDirty(d)) {
+        const from = state.copyFrom ?? d.day;
+        const days = state.copyTo.filter(day => day !== from);
+        if (from === d.day && isTemplateDirty(d)) {
           setMessage('copy-msg', `${dayName(d.day)}還有沒儲存的變更，請先按儲存或取消變更。`, true);
           return;
         }
-        const days = [...main.querySelectorAll<HTMLInputElement>('[data-copy-day]:checked')].map(c => Number(c.dataset.copyDay));
         if (!days.length) {
           setMessage('copy-msg', '請先勾選要複製到哪幾天。', true);
           return;
         }
         const names = days.map(dayName).join('、');
-        if (!confirm(`${names}原本的活動會換成${dayName(d.day)}的活動，確定要複製嗎？`)) return;
-        for (const day of days) settings.template[day] = settings.template[d.day].map(a => ({ ...a }));
+        // 複製到正在編輯的那一天：草稿換成複製過來的內容，沒儲存的變更會不見
+        const overwriteDraft = days.includes(d.day) && isTemplateDirty(d) ? `${dayName(d.day)}還沒儲存的變更也會不見。` : '';
+        if (!confirm(`${names}原本的活動會換成${dayName(from)}的活動。${overwriteDraft}確定要複製嗎？`)) return;
+        for (const day of days) settings.template[day] = settings.template[from].map(a => ({ ...a }));
         saveSettings();
-        main.querySelectorAll<HTMLInputElement>('[data-copy-day]').forEach(c => (c.checked = false));
-        setMessage('copy-msg', `已複製到${names}。`);
+        if (days.includes(d.day)) state.tdraft = null;
+        state.copyTo = [];
+        render();
+        setMessage('copy-msg', `已把${dayName(from)}複製到${names}。`);
+        focusId('copy-from');
         break;
       }
     }
   });
 
-  // 欄位輸入只改草稿不重畫，打字不會被打斷；種類改了才重畫（先後階段、開始欄位的名稱會變）
+  // 欄位輸入：改草稿並重畫，開始時間或種類改完再照時間重排（見 resort）
   const onField = (e: Event) => {
     const t = e.target as HTMLInputElement;
     const field = t.dataset.sf as keyof Omit<ActRow, 'id'> | undefined;
@@ -131,12 +144,89 @@ export function initSettingsPage(main: HTMLElement, { render, setMessage, focusS
     // 改成浮動事項時先選最後一個階段（整天都會列出），之後可以再改
     const row = state.tdraft.rows[i];
     if (field === 'mode' && row?.mode === 'float' && !row.stage) row.stage = settings.stages.at(-1)?.id ?? '';
-    if (e.type === 'change' && RERENDER.has(field)) {
-      render();
-      focusId(t.id);
+    // 開始時間改完統一寫成 10:30 的樣子（打 1030 也可以）
+    if (e.type === 'change' && field === 'start' && row) row.start = parseTimeInput(row.start) ?? row.start;
+    // 輸入時就重畫：時間條、卡片標題與重疊跟著變。欄位用 live() 綁定，打字不會被打斷
+    render();
+    // 開始時間或種類改完（離開欄位）才照時間重排，等焦點移到下一個欄位後再排，焦點跟著原本那一列走
+    if (e.type === 'change' && (field === 'start' || field === 'mode') && row) {
+      setTimeout(() => resort(row.id), 0);
     }
   };
+
+  afterEdit = (id: string) => {
+    const d = state.tdraft;
+    if (!d) return;
+    sortRows(d);
+    render();
+    const seg = document.getElementById(`seg-${id}`);
+    if (seg) focusStill(seg);
+  };
+
+  /** 跳到清單裡第 i 列的名稱欄（從時間條點過來），捲動有動畫 */
+  function gotoRow(i: number) {
+    const el = main.querySelector<HTMLElement>(`#s${i}-label`);
+    if (!el) return;
+    el.closest('.act-row')?.scrollIntoView({ block: 'center', behavior: scrollBehavior() });
+    el.focus({ preventScroll: true });
+  }
+
+  // 時間條的鍵盤操作：和調整時間表一樣，左右鍵 5 分鐘、Page Up／Page Down 30 分鐘、Shift 加左右鍵改長度；Enter 跳到那一列
+  const KEY_STEP: Record<string, number> = { ArrowLeft: -5, ArrowRight: 5, PageUp: -30, PageDown: 30 };
+  main.addEventListener('keydown', e => {
+    const t = e.target as HTMLElement;
+    if (currentRoute() !== 'settings' || !t.matches('.set-strip [data-seg]') || !state.tdraft) return;
+    const i = rowAt(Number(t.dataset.seg));
+    if (i === undefined) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      return gotoRow(i);
+    }
+    const step = KEY_STEP[e.key];
+    const sp = state.tdraft.rows[i] && spanOf(state.tdraft.rows[i]);
+    if (step === undefined || !sp) return;
+    e.preventDefault();
+    const resize = e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight');
+    if (resize) resizeTemplateRow(state.tdraft, i, sp.end + step);
+    else moveTemplateRow(state.tdraft, i, sp.start + step, stripLo());
+    afterStripEdit(state.tdraft.rows[i].id);
+  });
+
+  /** 照時間重排清單；moved 是剛改時間的那一列，它換了位置就播報 */
+  function resort(moved: string) {
+    const d = state.tdraft;
+    if (!d || currentRoute() !== 'settings') return;
+    const active = document.activeElement as HTMLElement | null;
+    const inRow = active?.dataset.i !== undefined && active.closest('.act-row');
+    const keepId = inRow ? d.rows[Number(active!.dataset.i)]?.id : undefined;
+    const keepField = active?.dataset.sf;
+    const keepAct = active?.dataset.setAct;
+    if (!sortRows(d)) return;
+    render();
+    const at = d.rows.findIndex(r => r.id === moved);
+    if (at >= 0) setMessage('set-msg', `清單已照時間重排，「${d.rows[at].label.trim() || '未命名'}」現在是第 ${at + 1} 個。`);
+    if (keepId) {
+      const k = d.rows.findIndex(r => r.id === keepId);
+      const btn = keepAct && main.querySelector<HTMLElement>(`[data-set-act="${keepAct}"][data-i="${k}"]`);
+      if (btn) focusStill(btn);
+      else focusId(keepField ? `s${k}-${keepField}` : `s${k}-label`);
+    }
+  }
   main.addEventListener('input', onField);
+
+  // 複製的來源與勾選記在 state，重畫時才留得住（來源換了，勾選框要跟著停用來源那天）
+  main.addEventListener('change', e => {
+    const t = e.target as HTMLInputElement;
+    if (currentRoute() !== 'settings') return;
+    if (t.id === 'copy-from') {
+      state.copyFrom = Number(t.value);
+      render();
+      focusId('copy-from');
+    } else if (t.dataset.copyDay !== undefined) {
+      const day = Number(t.dataset.copyDay);
+      state.copyTo = t.checked ? [...state.copyTo, day] : state.copyTo.filter(x => x !== day);
+    }
+  });
   main.addEventListener('change', onField);
 
   /** 先後階段的新增與刪除，改了直接儲存 */
@@ -199,3 +289,50 @@ export function initSettingsPage(main: HTMLElement, { render, setMessage, focusS
     }
   });
 }
+
+/** 捲動要不要動畫：使用者要求減少動態時直接跳過去 */
+const scrollBehavior = (): ScrollBehavior =>
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+
+/** 時間條上第 k 塊對應清單上的第幾列（見 template-draft.ts 的 stripRows） */
+const rowAt = (k: number): number | undefined => (state.tdraft ? stripRows(state.tdraft.rows)[k]?.index : undefined);
+
+/** 設定頁時間條的左端（分鐘），拖動時最早只能到這裡 */
+const stripLo = (): number => Number(document.querySelector<HTMLElement>('.set-strip .strip-track')?.dataset.lo ?? 0);
+
+let afterEdit: (id: string) => void = () => {};
+
+/**
+ * 時間條改完（放開或按鍵）：照時間重排，焦點留在同一個活動的那一塊。
+ * initSettingsPage 設定實際的做法，因為要用到重畫與聚焦
+ */
+const afterStripEdit = (id: string) => afterEdit(id);
+
+/**
+ * 給 main.ts 的時間條拖動用：設定頁的時間條拖動時改範本草稿。k 是時間條上第幾塊（順序不隨清單變）。
+ * 每移一格就照時間重排清單，下面的表格跟著變；被拖的那一塊在時間條上的位置編號不變，拖動不會中斷
+ */
+export const settingsStrip = {
+  times(k: number): [string, string] | undefined {
+    const i = rowAt(k);
+    const r = i === undefined ? undefined : state.tdraft?.rows[i];
+    const sp = r && spanOf(r);
+    return sp ? [fmtTime(sp.start), fmtTime(Math.min(sp.end, 24 * 60 - 1))] : undefined;
+  },
+  move(k: number, start: number): void {
+    const i = rowAt(k);
+    if (!state.tdraft || i === undefined) return;
+    moveTemplateRow(state.tdraft, i, start, stripLo());
+    sortRows(state.tdraft);
+  },
+  resize(k: number, end: number): void {
+    const i = rowAt(k);
+    if (state.tdraft && i !== undefined) resizeTemplateRow(state.tdraft, i, end);
+  },
+  /** 放開：重排後焦點跟著被拖的那一塊 */
+  end(k: number): void {
+    const i = rowAt(k);
+    const id = i === undefined ? undefined : state.tdraft?.rows[i]?.id;
+    if (id) afterStripEdit(id);
+  },
+};

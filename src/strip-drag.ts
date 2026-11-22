@@ -4,7 +4,7 @@ import { toMin } from './lib/time';
 
 // 時間條的拖動：按住任務左右拖是整塊移動，按住右邊緣是改長度。滑鼠、觸控、手寫筆都用指標事件。
 // 每移動一格（5 分鐘）就通知外面改草稿並重畫；lit-html 重畫時沿用同一個元素，所以拖曳不會中斷。
-// 放開時通知外面（onEnd），這時才依時間重排、播報衝突，拖動途中任務的位置編號不會變。
+// 放開時通知外面（onEnd，附上拖的是第幾個），這時才依時間重排、播報衝突，拖動途中任務的位置編號不會變。
 // 鍵盤操作不在這裡，由 main.ts 的 keydown 處理。
 
 interface StripDrag {
@@ -17,6 +17,8 @@ interface StripDrag {
   end: number;
   ppm: number;
   last: number;
+  /** 拖動過（不只是點一下）。放開後的 click 要擋掉，免得被當成點擊 */
+  moved: boolean;
 }
 
 let drag: StripDrag | null = null;
@@ -29,7 +31,7 @@ export function initStripDrag(
   times: (index: number) => [string, string] | undefined,
   onMove: (index: number, start: number) => void,
   onResize: (index: number, end: number) => void,
-  onEnd: () => void,
+  onEnd: (index: number) => void,
 ): void {
   root.addEventListener('pointerdown', e => {
     if (drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
@@ -56,6 +58,7 @@ export function initStripDrag(
       end: toMin(t[1]),
       ppm: pxPerMinute(track),
       last: 0,
+      moved: false,
     };
     el.classList.add('is-dragging');
   });
@@ -66,6 +69,7 @@ export function initStripDrag(
     const steps = Math.round((e.clientX - d.x) / d.ppm / STEP_MIN) * STEP_MIN;
     if (steps === d.last) return;
     d.last = steps;
+    d.moved = true;
     if (d.resize) onResize(d.index, d.end + steps);
     else onMove(d.index, d.start + steps);
   });
@@ -76,7 +80,13 @@ export function initStripDrag(
     drag = null;
     d.el.classList.remove('is-dragging');
     if (d.el.hasPointerCapture(d.pointerId)) d.el.releasePointerCapture(d.pointerId);
-    onEnd();
+    if (d.moved) {
+      // 放開後瀏覽器還會送一次 click，拖動過的話擋掉（設定頁的時間條點一下是跳到那一列）
+      const block = (ev: Event) => ev.stopPropagation();
+      window.addEventListener('click', block, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener('click', block, { capture: true }), 0);
+    }
+    onEnd(d.index);
   };
   root.addEventListener('pointerup', finish);
   root.addEventListener('pointercancel', finish);

@@ -17,7 +17,7 @@ import { renderReview } from './views/review';
 import { renderTerms } from './views/terms';
 import { renderWeek } from './views/week';
 import { renderSettings } from './views/settings';
-import { hasTemplateChanges, initSettingsPage, leaveTemplateDraft } from './settings-page';
+import { hasTemplateChanges, initSettingsPage, leaveTemplateDraft, settingsStrip } from './settings-page';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 const main = $('#main');
@@ -455,24 +455,30 @@ main.addEventListener('input', e => {
   }
 });
 
-// 時間條：拖動任務整塊移動或改長度，每移一格就改草稿並重畫。拖動途中不重排，放開後才依時間重排並播報衝突
+// 時間條：拖動任務整塊移動或改長度，每移一格就改草稿並重畫。拖動途中不重排，放開後才依時間重排。
+// 設定頁的時間條改的是每週範本的草稿（見 settings-page.ts），其他是調整時間表的草稿
+const onSettings = () => currentRoute() === 'settings';
 initStripDrag(
   main,
   i => {
+    if (onSettings()) return settingsStrip.times(i);
     const b = state.draft?.blocks[i];
     return b ? [b.start, b.end] : undefined;
   },
   (i, start) => {
-    if (!state.draft) return;
-    moveRow(state.draft, i, start);
+    if (onSettings()) settingsStrip.move(i, start);
+    else if (state.draft) moveRow(state.draft, i, start);
+    else return;
     render();
   },
   (i, end) => {
-    if (!state.draft) return;
-    resizeRow(state.draft, i, end);
+    if (onSettings()) settingsStrip.resize(i, end);
+    else if (state.draft) resizeRow(state.draft, i, end);
+    else return;
     render();
   },
-  () => {
+  i => {
+    if (onSettings()) return settingsStrip.end(i);
     if (!state.draft) return;
     sortDraft(state.draft);
     render();
@@ -487,7 +493,7 @@ main.addEventListener('keydown', e => {
   const t = e.target as HTMLElement;
   const d = state.draft;
   const step = KEY_STEP[e.key];
-  if (!d || t.dataset.seg === undefined || step === undefined) return;
+  if (!d || currentRoute() !== 'today' || t.dataset.seg === undefined || step === undefined) return;
   e.preventDefault();
   const i = Number(t.dataset.seg);
   const b = d.blocks[i];

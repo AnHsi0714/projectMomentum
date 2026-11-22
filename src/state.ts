@@ -19,6 +19,9 @@ export const state: {
   setDay: number;
   /** 設定頁那一天範本的草稿，按儲存才寫進設定檔。切換星期或離開設定頁時丟掉 */
   tdraft: TemplateDraft | null;
+  /** 設定頁「複製」的來源星期，null 表示跟著上面選的那一天；複製到的星期 */
+  copyFrom: number | null;
+  copyTo: number[];
 } = {
   selDate: new Date(),
   followToday: true,
@@ -26,6 +29,8 @@ export const state: {
   recoverTouched: null,
   setDay: new Date().getDay(),
   tdraft: null,
+  copyFrom: null,
+  copyTo: [],
 };
 
 let lastRoute: ViewId = 'today';

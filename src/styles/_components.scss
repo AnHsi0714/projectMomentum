@@ -1723,3 +1723,30 @@ select {
     }
   }
 }
+
+// 設定頁的時間條：可以拖，固定時段也能拖（範本就是在決定它的時間），只用虛線框標出是固定。
+// 往下改清單時貼在視窗頂端（只在活動那一節裡），底色與頁面相同才不會透出下面的內容
+.set-strip {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin-top: 0.75rem;
+  padding-block: 0.5rem;
+  border-bottom: 2px solid var(--text);
+  background: var(--bg);
+
+  .seg.is-fixed:not(.is-clash) {
+    border-style: dashed;
+    border-color: var(--text);
+  }
+}
+
+.copy-to-label {
+  margin-top: 0.5rem;
+  font-weight: 700;
+}
+
+// 用 Tab 移到清單裡的欄位時，捲動會讓出貼在頂端的時間條的高度，欄位才不會被蓋住
+.act-list :is(input, select, button) {
+  scroll-margin-top: 11rem;
+}
