@@ -14,8 +14,14 @@ import { elapsedMinutes, fmtTime, parseKey, toMin } from './time';
 //   忘了按、按錯或時間不對，在調整時間表裡直接改實際紀錄，確認時整天換掉（replaceLog）。
 // 習慣是否完成見下面的 habitItems。
 
-/** 一個任務今天的狀態。missed 是預定時間已經過了還沒開始（用 id 查時，看的是就寢時間） */
-export type Status = 'todo' | 'running' | 'cut' | 'done' | 'missed';
+/**
+ * 一個任務今天的狀態。missed 是預定時間已經過了還沒開始（用 id 查時，看的是就寢時間）。
+ * cut 是中斷：沒做滿預定長度就停了，當天還能繼續；unfinished 是過了就寢還沒做滿，沒機會補了
+ */
+export type Status = 'todo' | 'running' | 'cut' | 'done' | 'missed' | 'unfinished';
+
+/** 差這麼多分鐘以內算做滿（時間條的一格），例如被固定時段自動結束時只差 1 分鐘 */
+export const FULL_GRACE = 5;
 
 export const logFor = (dk: string): Entry[] => data.log[dk] ?? [];
 
@@ -25,11 +31,22 @@ export const running = (dk: string): Entry | undefined => logFor(dk).find(e => !
 /** 某個任務或浮動事項的所有紀錄 */
 export const entriesOf = (dk: string, ref: string): Entry[] => logFor(dk).filter(e => e.ref === ref);
 
-/** 任務的狀態：預定的結束時間過了還沒開始，就是沒做，不再排進下一個 */
+/**
+ * 任務的狀態：預定的結束時間過了還沒開始，就是沒做，不再排進下一個。
+ * 停下來的（被打斷、暫停、碰到固定時段自動結束）看時間：做滿預定長度（差 FULL_GRACE 以內）算完成，
+ * 沒做滿是中斷，過了就寢就是未完成。自己按結束的不管做多久都算完成（例如提早做完）
+ */
 export function statusOf(dk: string, b: Block, now: Date): Status {
   const st = refStatus(dk, b.id, now);
+  if (st === 'cut') {
+    if (isFull(dk, b)) return 'done';
+    return elapsedMinutes(dk, now) >= SLEEP_MIN ? 'unfinished' : 'cut';
+  }
   return st === 'todo' && elapsedMinutes(dk, now) >= toMin(b.end) ? 'missed' : st;
 }
+
+/** 這個任務做滿了沒：已經做的（加上 extra 分鐘）達到預定長度，差 FULL_GRACE 以內也算 */
+export const isFull = (dk: string, b: Block, extra = 0): boolean => spentOn(dk, b.id) + extra >= durOf(b) - FULL_GRACE;
 
 /** 用 id 判斷狀態，任務已經從時間表刪掉也查得到 */
 export function refStatus(dk: string, ref: string, now: Date): Status {
@@ -51,9 +68,12 @@ export const remainingOf = (dk: string, b: Block): number => Math.max(0, durOf(b
 export const nextTask = (dk: string, blocks: Block[], now: Date): Block | undefined =>
   blocks.find(b => !isClock(b) && statusOf(dk, b, now) === 'todo' && !isCanceled(dk, b));
 
-/** 被打斷或暫停、還沒做完的任務，最近停下來的排前面。休息時每一個都有「繼續」 */
+/**
+ * 被打斷、暫停或碰到固定時段停下來的任務，最近停下來的排前面。休息時每一個都有「繼續」。
+ * 已經做滿預定長度的也列（算完成了，但想多做一點還是能接著做）
+ */
 export function cutTasks(dk: string, blocks: Block[], now: Date): Block[] {
-  const cut = blocks.filter(b => statusOf(dk, b, now) === 'cut');
+  const cut = blocks.filter(b => refStatus(dk, b.id, now) === 'cut');
   const endOf = (b: Block) => toMin(entriesOf(dk, b.id).at(-1)?.end ?? '00:00');
   return cut.sort((a, b) => endOf(b) - endOf(a));
 }
@@ -120,10 +140,14 @@ export function habitItems(dk: string, now: Date): Map<string, HabitItem[]> {
   const day = parseKey(dk).getDay();
   const elapsed = elapsedMinutes(dk, now);
 
+  const blocks = blocksFor(dk, day);
   for (const e of logFor(dk)) {
-    if (!e.float) add(habitOf(e), { ref: e.ref, done: refStatus(dk, e.ref, now) === 'done' });
+    if (e.float) continue;
+    // 還在時間表上的照 statusOf（被打斷但做滿了也算完成），已經刪掉的只看紀錄
+    const b = blocks.find(x => x.id === e.ref);
+    add(habitOf(e), { ref: e.ref, done: (b ? statusOf(dk, b, now) : refStatus(dk, e.ref, now)) === 'done' });
   }
-  for (const b of blocksFor(dk, day)) {
+  for (const b of blocks) {
     if (isClock(b) && toMin(b.start) <= elapsed && !isCanceled(dk, b)) add(habitOf(b), { ref: b.id, done: toMin(b.end) <= elapsed });
   }
   for (const f of floatsFor(day)) {
@@ -259,7 +283,10 @@ export function settle(dk: string, blocks: Block[], now: Date): boolean {
   const stops = blocks.filter(isClock).map(b => toMin(b.start)).filter(t => t > s && t <= m);
   if (m >= SLEEP_MIN) stops.push(SLEEP_MIN);
   if (!stops.length) return false;
-  close(dk, Math.min(...stops), false);
+  // 不是自己按的結束：做滿了算完成，沒做滿記成中斷，固定時段過了還能繼續
+  const at = Math.min(...stops);
+  const plan = r.float ? undefined : blocks.find(b => b.id === r.ref);
+  close(dk, at, !!plan && !isFull(dk, plan, at - s));
   save();
   return true;
 }

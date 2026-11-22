@@ -66,7 +66,9 @@ function editRow(d: Draft, i: number, now: Date, clash: boolean): TemplateResult
 }
 
 /** 任務狀態在列上的標記。還沒開始的不標，完成的打勾（見 check.ts） */
-const STATUS_BADGE: Record<Status, string | TemplateResult> = { todo: '', running: '進行中', cut: '中斷', done: checkMark(), missed: '沒做' };
+const STATUS_BADGE: Record<Status, string | TemplateResult> = {
+  todo: '', running: '進行中', cut: '中斷', done: checkMark(), missed: '沒做', unfinished: '未完成',
+};
 
 /** 平常的一列要顯示的內容。start、end 是分鐘數，用來排順序與算中間的休息 */
 interface ViewItem {
@@ -88,8 +90,10 @@ interface ViewItem {
  * 實際紀錄的一段：左邊是實際開始與結束，右邊是計畫的時間。
  * 浮動事項沒有計畫，右邊寫「浮動」。一個任務被浮動事項打斷再繼續，會分成兩段，各自一列。
  */
-function entryItem(dk: string, e: Entry, plan: Block | undefined, elapsed: number, expectedEnd: number): ViewItem {
-  const st: Status = !e.end ? 'running' : e.cut ? 'cut' : 'done';
+function entryItem(dk: string, e: Entry, plan: Block | undefined, elapsed: number, expectedEnd: number, now: Date): ViewItem {
+  // 任務的最後一段照整個任務的狀態（做滿了沒、過了就寢沒）；前面被打斷、後來又接著做的段落標中斷
+  const last = plan && logFor(dk).filter(x => x.ref === e.ref).at(-1) === e;
+  const st: Status = !e.end ? 'running' : last ? statusOf(dk, plan, now) : e.cut ? 'cut' : 'done';
   const start = toMin(e.start);
   return {
     start,
@@ -160,7 +164,7 @@ function viewItems(dk: string, blocks: Block[], now: Date): ViewItem[] {
   const logged = new Set(log.map(e => e.ref));
   const items = [
     ...log.map(e =>
-      entryItem(dk, e, e.float ? undefined : blocks.find(b => b.id === e.ref), elapsed, e.end ? 0 : plannedEnd(dk, e, blocks, floats)),
+      entryItem(dk, e, e.float ? undefined : blocks.find(b => b.id === e.ref), elapsed, e.end ? 0 : plannedEnd(dk, e, blocks, floats), now),
     ),
     ...blocks.filter(b => !logged.has(b.id)).map(b => planItem(dk, b, now, today, elapsed)),
   ];

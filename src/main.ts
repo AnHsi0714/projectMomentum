@@ -227,7 +227,7 @@ function handleRun(act: string, ref: string | undefined, at: number | undefined)
     const left = b ? `，還剩 ${fmtDur(remainingOf(dk, b))}` : '';
     message = `「${r.label}」已暫停${left}。要接著做時按「繼續」。`;
   } else if (act === 'switch') {
-    // 回到前一個任務：現在這個先暫停（之後可以繼續），前一個從現在接著做。前一個的預定長度用完了就不再問還在不在做
+    // 回到別的任務（前一個或被打斷的）：現在這個先暫停（之後可以繼續），那一個從現在接著做。它的預定長度用完了就不再問還在不在做
     const b = blocks.find(x => x.id === ref);
     if (!r || r.float || !b) return;
     pauseRunning(dk, now);

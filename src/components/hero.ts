@@ -10,7 +10,7 @@ import { timeRange } from './time-range';
 
 // 「現在」區塊：依實際紀錄顯示現在在做什麼。
 //   有任務或浮動事項在進行：名稱、已進行多久、進度尺、結束按鈕；超過預定長度太多時問還在不在做。
-//   任務多一個暫停，以及「回到」前一個任務：這個先暫停，切回去做前一個，之後再按繼續回來。
+//   任務多一個暫停，以及「回到」別的任務（前一個任務與被打斷、暫停的任務）：這個先暫停，切回去做那一個，之後再按繼續回來。
 //   固定時段（上課、通勤）照時鐘：名稱、還剩多久、進度尺，不用按。
 //   都沒有：休息，下面是下一個任務的開始按鈕、被打斷的任務的繼續按鈕，以及剛結束的任務的接著做按鈕。
 // 浮動事項（吃飯、洗澡、假日起床）的開始按鈕一直列在最下面，按下去會暫停正在做的任務。
@@ -46,7 +46,7 @@ const nextLine = (nxt: Block | undefined) =>
   html`<p class="hero-next">${nxt ? html`接著 <b>${nxt.start}</b> ${nxt.label}` : html`接著 <b>${SLEEP_TIME}</b> 就寢`}</p>`;
 
 /** 正在進行的任務或浮動事項：名稱、開始時間、已進行、進度尺、結束按鈕 */
-function runningBody(m: number, r: Entry, planEnd: number, nxt: Block | undefined, back: Block | undefined): TemplateResult {
+function runningBody(m: number, r: Entry, planEnd: number, nxt: Block | undefined, backs: Block[]): TemplateResult {
   const s = toMin(r.start);
   const planned = planEnd - s;
   const over = m - planEnd;
@@ -61,7 +61,7 @@ function runningBody(m: number, r: Entry, planEnd: number, nxt: Block | undefine
     : html`<div class="hero-actions">
         <button type="button" class="btn btn-solid" data-run="end">結束<span class="sr-only">「${r.label}」</span></button>
         ${r.float ? nothing : html`<button type="button" class="btn" data-run="pause">暫停<span class="sr-only">「${r.label}」</span></button>`}
-        ${back ? html`<button type="button" class="btn" data-run="switch" data-ref=${back.id}>回到「${back.label}」</button>` : nothing}
+        ${backs.map(b => html`<button type="button" class="btn" data-run="switch" data-ref=${b.id}>回到「${b.label}」</button>`)}
       </div>`;
   return html`<p class="hero-eyebrow">${r.float ? '進行中・浮動' : '進行中'}</p>
     <h2 class="hero-title kind-${KIND_OF[r.type]}">${r.label}</h2>
@@ -160,7 +160,14 @@ export function hero(now: Date, dk: string, blocks: Block[], floats: Float[], ad
   const fixed = blocks.find(b => isClock(b) && toMin(b.start) <= m && m < toMin(b.end));
   const upcoming = blocks.find(b => toMin(b.start) > m && !isClock(b)) ?? next;
   let body: TemplateResult;
-  if (r) body = runningBody(m, r, plannedEnd(dk, r, blocks, floats), next, previousTask(dk, blocks));
+  if (r) {
+    // 可以回到的任務：前一個任務，加上被打斷或暫停、還沒做完的（中間隔了好幾件事也回得去），不含正在做的
+    const prev = previousTask(dk, blocks);
+    const backs = [...(prev ? [prev] : []), ...cutTasks(dk, blocks, now)].filter(
+      (b, k, all) => b.id !== r.ref && all.findIndex(x => x.id === b.id) === k,
+    );
+    body = runningBody(m, r, plannedEnd(dk, r, blocks, floats), next, r.float ? [] : backs);
+  }
   else if (fixed) body = fixedBody(m, dk, fixed, upcoming);
   else body = restBody(m, dk, blocks, next, cutTasks(dk, blocks, now), lastEnded(dk, blocks), logFor(dk).length > 0);
   // 過了就寢時間也不列浮動事項
